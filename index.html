@@ -886,20 +886,16 @@ button { font: inherit; color: inherit; }
       campoNum("estatura", "Estatura (cm)", null, 130, 200) +
       campoNum("psist", "PA sistólica (mmHg)", "407", 60, 250) +
       campoNum("pdias", "PA diastólica (mmHg)", "408", 30, 160) +
-      campoNum("spo2", "SpO₂ (%)", "405", 50, 100);
+      // D-08: com 405 vazio a CALCULADORA assume 97%, e o campo continua vazio.
+      // A dica vai DENTRO do campo: solta na grade ela virava mais um item e
+      // caia na primeira coluna da linha seguinte, embaixo do peso -- longe do
+      // campo que explica.
+      campoNum("spo2", "SpO₂ (%)", "405", 50, 100,
+        get("spo2") ? null : "em branco, a calculadora assume 97% e marca como assumido");
     if (peso && alt) {
       var imc = peso / Math.pow(alt / 100, 2);
       h += '<div class="campo campo--p campo--derivado"><label>IMC <span class="selo-derivado">calc</span></label>' +
         '<input value="' + imc.toFixed(1) + '" readonly></div>';
-    }
-    // D-08: com 405 vazio a CALCULADORA assume 97%, e o campo continua vazio.
-    // Nao existe botao de imputar aqui de proposito -- o botao que existia
-    // gravava 97 em 405, o que tornava o valor assumido indistinguivel de uma
-    // oximetria medida e fazia o cartao de confianca subir para "Alta".
-    if (!get("spo2")) {
-      h += '<div style="margin-top:8px;font-size:11.5px;color:#93a2b1">' +
-        "SpO₂ em branco: a calculadora assume 97% e marca o valor como assumido." +
-        "</div>";
     }
     h += "</div></div>";
 
@@ -1256,10 +1252,11 @@ button { font: inherit; color: inherit; }
      contrario. type="text" + inputmode deixa o cursor legivel, mantem o teclado
      numerico no celular, e o filtro de entrada abaixo recusa o que nao e
      numero. */
-  function campoNum(k, r, c, min, max) {
+  function campoNum(k, r, c, min, max, dica) {
     return '<div class="campo campo--p"><label>' + esc(r) + " " + cod(c) + "</label>" +
       '<input type="text" inputmode="decimal" data-num data-min="' + min + '" data-max="' + max +
-      '" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
+      '" data-k="' + k + '" value="' + esc(get(k) || "") + '">' +
+      (dica ? '<span class="campo__dica">' + esc(dica) + "</span>" : "") + "</div>";
   }
   function campoData(k, r, c, t) {
     return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + " " + cod(c) + "</label>" +
