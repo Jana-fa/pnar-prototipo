@@ -58,9 +58,13 @@ button { font: inherit; color: inherit; }
   position: fixed; inset: 0; background: rgba(42, 63, 84, .55);
   display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50;
 }
+/* O uso e em desktop, na estacao do ambulatorio. 1180px deixava um terco da
+   tela vazio a direita e empurrava o formulario para uma coluna estreita, o
+   que aumenta rolagem -- justamente o custo que este projeto existe para
+   reduzir. */
 .modal {
-  background: var(--branco); border-radius: 4px; width: 100%; max-width: 1180px;
-  height: 100%; max-height: 92vh; display: flex; flex-direction: column;
+  background: var(--branco); border-radius: 4px; width: 100%; max-width: 1560px;
+  height: 100%; max-height: 94vh; display: flex; flex-direction: column;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .3); overflow: hidden;
 }
 
@@ -124,10 +128,22 @@ button { font: inherit; color: inherit; }
 }
 
 /* --- campos --------------------------------------------------------------- */
-.campos { display: flex; flex-wrap: wrap; gap: 12px 16px; }
+/* Grade, nao flex-wrap. Com flex-wrap as larguras eram fixas (110/190/300px):
+   os campos se amontoavam a esquerda e o resto da linha ficava vazio, e a
+   ultima linha de cada bloco ficava sempre desalinhada. Em grade as colunas
+   dividem a largura disponivel em partes iguais, entao os rotulos alinham na
+   vertical de um bloco para o outro e a tela larga e de fato aproveitada. */
+.campos {
+  display: grid; gap: 14px 18px; align-items: start;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
 .campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.campo--p { width: 110px; } .campo--m { width: 190px; } .campo--g { width: 300px; }
-.campo--full { width: 100%; }
+.campo--p { grid-column: span 1; } .campo--m { grid-column: span 1; }
+.campo--g { grid-column: span 2; }
+.campo--full { grid-column: 1 / -1; }
+/* Medida curta nao ganha nada em ficar larga -- o campo ocupa a coluna, o
+   controle nao. */
+.campo--p input { max-width: 132px; }
 .campo > label { font-size: 12px; color: var(--texto-forte); font-weight: 600; }
 .campo input, .campo select, .campo textarea {
   border: 1px solid var(--borda-forte); border-radius: 3px; padding: 6px 8px;
@@ -165,7 +181,10 @@ button { font: inherit; color: inherit; }
 .tri button:focus-visible { outline: 2px solid var(--azul); outline-offset: -2px; z-index: 1; }
 
 /* --- grade de condições --------------------------------------------------- */
-.grade { width: 100%; border-collapse: collapse; }
+/* Tabela nao ocupa a largura toda: com 1360px de painel, as quatro colunas do
+   controle glicemico ficavam a 700px umas das outras e o olho perdia a linha. */
+.grade { width: 100%; max-width: 1000px; border-collapse: collapse; }
+.grade--larga { max-width: none; }
 .grade th {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
   color: var(--texto-fraco); font-weight: 700; text-align: center;
@@ -261,14 +280,32 @@ button { font: inherit; color: inherit; }
   color: var(--texto-fraco); font-weight: 700; background: #f4f6f8;
   padding: 4px 8px; margin: 10px 0 2px; border-radius: 2px;
 }
+/* Gramatica de linha unica. Em grade e nao em flex: o controle cai sempre na
+   MESMA coluna x, mesmo quando um rotulo e muito mais longo que os vizinhos.
+   Com flex o rotulo de largura fixa estourava e empurrava o controle, que era
+   exatamente o defeito que a gramatica deveria eliminar.
+   Em duas colunas quando a tela permite -- as 14 condicoes ocupavam uma coluna
+   so e obrigavam a rolar por uma lista longa e estreita. */
+.linhas-cond {
+  display: grid; gap: 0 28px;
+  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+}
+/* Rotulo em coluna de largura FIXA, nao 1fr. Com 1fr as bordas DIREITAS dos
+   controles e que alinham, e a esquerda passa a variar conforme o numero de
+   opcoes -- o olho perde o ponto de partida, que e justamente o que a gramatica
+   de linha existe para dar. Medido: 1fr produzia 8 posicoes x distintas so na
+   coluna esquerda; a largura fixa devolve uma. */
+/* justify-items:start e obrigatorio -- sem ele o track `auto` absorve o espaco
+   livre da coluna e o controle estica: "Nao | Sim | Nao sabe" chegava a 330px,
+   com o ultimo botao tres vezes maior que o primeiro. */
 .linha-cond {
-  display: flex; align-items: center; gap: 12px;
+  display: grid; grid-template-columns: 300px auto;
+  align-items: center; justify-items: start; gap: 14px;
   padding: 6px 0; border-bottom: 1px solid #f0f3f5;
 }
-.linha-cond__rot { width: 240px; flex-shrink: 0; color: var(--texto-forte); }
-.linha-cond__eco {
-  font-size: 11px; color: var(--texto-fraco); font-style: italic;
-}
+.linha-cond__rot { color: var(--texto-forte); min-width: 0; }
+/* O sub-eixo atravessa as duas colunas: ele rotula o grupo inteiro. */
+.linhas-cond .sub-eixo { grid-column: 1 / -1; }
 
 .condicional { display: none; padding-left: 16px; border-left: 2px solid var(--borda); margin: 6px 0 6px 4px; }
 .condicional.ver { display: block; }
@@ -302,10 +339,32 @@ button { font: inherit; color: inherit; }
   font-size: 9.5px; color: #b6c0ca; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
+/* Chips de resposta com largura uniforme. Sem isso cada opcao ficava do
+   tamanho da propria palavra e as sorologias viravam sete linhas de larguras
+   diferentes -- o olho perde a coluna e precisa reler cada rotulo. */
+/* Grade de colunas FIXAS, nao flex. Com flex cada chip ficava do tamanho da
+   propria palavra ("Possivel infeccao aguda" 20% maior que "Imune") e as
+   colunas nao alinhavam de uma linha para a outra. Largura fixa faz a resposta
+   cair sempre na mesma posicao horizontal, que e o que permite varrer as sete
+   sorologias sem reler cada rotulo. */
+.chips {
+  display: grid; gap: 6px; align-items: stretch;
+  grid-template-columns: repeat(auto-fill, 152px);
+}
+.chips .atalho {
+  text-align: center; padding: 5px 8px; line-height: 1.25;
+  overflow-wrap: break-word; hyphens: auto;
+}
+
+@media (max-width: 1100px) {
+  .linhas-cond { grid-template-columns: 1fr; }
+}
 @media (max-width: 860px) {
   .trilho { width: 54px; }
   .trilho__item span.rotulo { display: none; }
-  .campo--g, .campo--m { width: 100%; }
+  .campos { grid-template-columns: 1fr; }
+  .campo--g { grid-column: span 1; }
+  .chips .atalho { min-width: 0; flex: 1 1 auto; }
 }
 </style>
 
@@ -314,8 +373,9 @@ button { font: inherit; color: inherit; }
   <div class="pagina__caminho">Ambulatório / PNAR / 1ª consulta médica</div>
   <button class="abrir" id="abrir">Abrir formulário de atendimento</button>
   <p style="margin-top:14px;font-size:12px;color:#93a2b1;max-width:640px">
-    Protótipo da proposta de tela. Os códigos entre colchetes ao lado dos campos são
-    os números da planilha — aparecem só nesta demonstração, para conferência.
+    Protótipo para avaliação. <b>Nada é gravado</b> — ao fechar a aba o preenchimento
+    se perde, então use apenas dados fictícios. Os números entre colchetes ao lado de
+    cada campo são os códigos da planilha, para conferência.
   </p>
 </div>
 
@@ -450,10 +510,10 @@ button { font: inherit; color: inherit; }
   ];
 
   var GLICEMIA = [
-    { id: "jeju", nome: "Jejum", faixa: "80-100", tot: "450", alt: "451", conferir: false },
-    { id: "pcaf", nome: "Pós café", faixa: "120-150", tot: "452", alt: "453", conferir: false },
-    { id: "palm", nome: "Pós almoço", faixa: "70-300", tot: "454", alt: "455", conferir: true },
-    { id: "pjan", nome: "Pós jantar", faixa: "70-300", tot: "456", alt: "457", conferir: true }
+    { id: "jeju", nome: "Jejum", faixa: "80-100", tot: "450", alt: "451" },
+    { id: "pcaf", nome: "Pós café", faixa: "120-150", tot: "452", alt: "453" },
+    { id: "palm", nome: "Pós almoço", faixa: "70-300", tot: "454", alt: "455" },
+    { id: "pjan", nome: "Pós jantar", faixa: "70-300", tot: "456", alt: "457" }
   ];
 
   /* O preditor do fullPIERS nao e "dor no peito": e dor toracica E/OU dispneia,
@@ -551,8 +611,7 @@ button { font: inherit; color: inherit; }
      ocupava espaco em consultas onde nao se aplica. */
   telas.calc = function () {
     var h = '<h2 class="painel__titulo">Calculadoras</h2>' +
-      '<p class="painel__nota">Escores calculados a partir do que já foi preenchido. ' +
-      "Nenhuma pede campo novo — se um insumo falta, o rótulo diz de qual bloco ele vem.</p>";
+      '<p class="painel__nota">Escores calculados a partir do que já foi preenchido nos outros blocos.</p>';
 
     var relevante = get("atu_pree") === "sim";
 
@@ -582,16 +641,15 @@ button { font: inherit; color: inherit; }
 
     h += '<div class="secao"><div class="secao__titulo">fullPIERS</div>' +
       '<p style="font-size:12px;margin:0 0 10px">Risco de desfecho materno adverso em 48 h na ' +
-      "<b>pré-eclâmpsia</b>. A planilha cita o modelo em 405, 422, 515 e 516.</p>";
+      "<b>pré-eclâmpsia</b>.</p>";
 
     if (!relevante) {
       h += '<div class="aviso aviso--info"><span>i</span><div>' +
         "<b>Não se aplica a esta paciente.</b> O fullPIERS pressupõe pré-eclâmpsia — marque 361 em " +
-        "<b>Gestação atual</b>. Os insumos abaixo continuam listados para você ver de onde cada um vem." +
-        "</div></div>";
+        "<b>Gestação atual</b>.</div></div>";
     }
 
-    h += '<div style="display:flex;flex-direction:column;gap:2px">';
+    var linhasPiers = "";
     estado.forEach(function (x) {
       var selo;
       if (x.imputado) {
@@ -601,11 +659,10 @@ button { font: inherit; color: inherit; }
       } else {
         selo = '<span class="piers__item" style="cursor:default">falta</span>';
       }
-      h += '<div class="linha-cond"><span class="linha-cond__rot">' +
-        esc(x.i.n) + " " + cod(x.i.c) + "</span>" + selo +
-        (x.imputado ? '<span class="linha-cond__eco">a calculadora usa 97%</span>' : "") + "</div>";
+      linhasPiers += '<div class="linha-cond"><span class="linha-cond__rot">' +
+        esc(x.i.n) + " " + cod(x.i.c) + "</span>" + selo + "</div>";
     });
-    h += "</div>";
+    h += grupoLinhas(linhasPiers);
 
     h += '<div class="resultado">' +
       '<div class="resultado__rot">Probabilidade de desfecho adverso em 48 h</div>' +
@@ -642,23 +699,10 @@ button { font: inherit; color: inherit; }
       "Uso ambulatorial, como nesta consulta, já está fora do cenário de derivação.</p>" +
       "</div>";
 
-    h += '<div class="aviso aviso--erro" style="margin-top:12px"><span>!</span><div>' +
-      "<b>Procurei a equação e não consegui verificá-la — por isso não a implementei.</b>" +
-      "A busca devolveu uma versão <b>parcial</b>: sem o intercepto, sem o termo de idade gestacional " +
-      "(que o próprio resumo do artigo lista como preditor) e sem as unidades de creatinina, plaquetas " +
-      "e TGO. Codificar um escore de risco a partir de resumo de buscador, com um preditor inteiro " +
-      "faltando, produziria um número plausível e errado — pior que não ter escore. Preciso do artigo " +
-      "original (Lancet 2011, von Dadelszen et al.); pelo portal da UFRN a tabela de coeficientes e " +
-      "unidades resolve." +
-      "</div></div></div>";
+    h += "</div>";
 
     h += '<div class="secao"><div class="secao__titulo">Hemorragia pós-parto (HPP)</div>' +
-      '<div class="proposto"><span class="selo-proposto">aguardando</span> ' +
-      '<b style="color:#8a6420">Aguardando a especificação que você vai enviar.</b><br>' +
-      "Preciso de quatro coisas: quais fatores de risco entram, de quais variáveis da planilha cada um " +
-      "sai (ou se são campos novos), como pontuam, e quais as faixas de classificação. O cartão de " +
-      "confiança já está pronto para envolver essa também." +
-      "</div></div>";
+      '<p style="font-size:12px;color:#93a2b1;margin:0">Em preparação.</p></div>';
 
     return h;
   };
@@ -666,8 +710,7 @@ button { font: inherit; color: inherit; }
 
   telas.ident = function () {
     return '<h2 class="painel__titulo">Identificação</h2>' +
-      '<p class="painel__nota">Nome e idade vêm do cadastro da paciente. Escolaridade usa a escala do SINASC ' +
-      '— a lista da planilha pula o código 2 e não tem ensino médio.</p>' +
+      '<p class="painel__nota">Nome e idade vêm do cadastro da paciente.</p>' +
       '<div class="campos">' +
       campoTexto("cida", "Naturalidade (cidade)", "101", "m") +
       campoSelect("zonr", "Zona de residência", "102", ["Urbana", "Área rural"], "m") +
@@ -675,11 +718,7 @@ button { font: inherit; color: inherit; }
       campoSelect("estc", "Estado civil", "104", ["Casada", "Solteira", "Viúva", "Divorciada", "União estável"], "m") +
       campoSelect("esco", "Escolaridade", "105", ESCOLARIDADE, "g") +
       campoTexto("enca", "Encaminhamento", "106", "g") +
-      "</div>" +
-      '<div class="aviso aviso--atencao" style="margin-top:16px"><span>⚠</span><div>' +
-      "<b>Telefone estava declarado como número na planilha.</b>" +
-      "Guardado como número, perde o zero à esquerda do DDD e estoura o limite de um inteiro. Aqui é texto." +
-      "</div></div>";
+      "</div>";
   };
 
   telas.gesta = function () {
@@ -687,7 +726,7 @@ button { font: inherit; color: inherit; }
     var igInf = get("ig_informada");
     var h = '<h2 class="painel__titulo">Gestação atual</h2>' +
       '<p class="painel__nota">Data provável do parto e idade gestacional são calculadas a partir da DUM. ' +
-      "Se você corrigir a IG por ultrassonografia, o sistema grava que foi informada, não calculada.</p>" +
+      "Corrigir a IG por ultrassonografia é registrado como informada.</p>" +
       '<div class="campos">' +
       campoData("dum", "Data da última menstruação", "350", "m");
 
@@ -704,51 +743,47 @@ button { font: inherit; color: inherit; }
 
     h += "</div>";
 
-    // Intercorrencias DESTA gestacao. O eco em cinza traz a resposta da gestacao
-    // anterior -- e o que sobra da comparacao horizontal depois de desfazer a
-    // grade de duas colunas, e fica justamente onde a conduta e decidida.
     h += '<div class="secao"><div class="secao__titulo">Intercorrências nesta gestação</div>' +
       '<p style="font-size:11.5px;color:#93a2b1;margin:0 0 8px">' +
       "Registra o que ocorreu <b>até</b> esta consulta, não apenas o que está ativo agora." +
       "</p>" +
-      intercorrencias("atu_", "atu", "ant_", "gestação anterior") +
-      campoArea("out4", "Outros", "369") + "</div>";
+      intercorrencias("atu_", "atu") +
+      '<div class="campos" style="margin-top:12px">' + campoArea("out4", "Outros", "369") + "</div></div>";
 
     h += '<div class="secao"><div class="secao__titulo">Queixas e medicamentos</div>' +
       '<div class="campos">' + campoArea("quea", "Queixas atuais", "368") + "</div>" +
-      linha("Medicamentos em uso", "150", "medu", SIM_NAO) +
-      condicional("medu", "sim", "medq", campoArea("medq", "Quais", "151"), "Não") +
-      '<div class="aviso aviso--info" style="margin-top:10px"><span>i</span><div>' +
-      "<b>Medicamentos em uso está aqui, não em Hábitos.</b> É estado presente e entra na conduta — " +
-      "perder de vista medicação em uso numa gestante de alto risco é dano direto." +
-      "</div></div></div>";
+      grupoLinhas(linha("Medicamentos em uso", "150", "medu", SIM_NAO)) +
+      condicional("medu", "sim", "medq", campoArea("medq", "Quais", "151"), "Não") + "</div>";
     return h;
   };
 
   telas.antec = function () {
     var h = '<h2 class="painel__titulo">Antecedentes</h2>' +
-      '<p class="painel__nota">Responde: <b>o que ela já tinha antes desta gestação, e o que corre na ' +
-      "família</b>. Nenhuma tabela aqui — a única tabela do formulário é a grade de intercorrências, " +
-      "e as colunas dela sempre significam tempo. Aqui muda o sujeito, não o tempo.</p>";
+      '<p class="painel__nota">O que ela já tinha antes desta gestação, e o que corre na família.</p>';
 
+    // Os condicionais "quais" quebram a grade de 2 colunas se ficarem soltos
+    // entre as linhas: acumula as linhas e emite o condicional fora do grupo.
     h += '<div class="secao"><div class="secao__titulo">Dela</div>';
+    var linhasPes = "", depoisPes = "";
     PESSOAIS.forEach(function (c) {
-      h += linha(esc(c.nome), c.cod, "pes_" + c.id, SIM_NAO,
-        c.par ? "também perguntado à " + c.par : null);
+      linhasPes += linha(esc(c.nome), c.cod, "pes_" + c.id, SIM_NAO);
       if (c.det) {
-        h += condicional("pes_" + c.id, "sim", "det_" + c.id,
+        depoisPes += condicional("pes_" + c.id, "sim", "det_" + c.id,
           campoTexto("det_" + c.id, "Quais", c.det, "g"), "Não");
       }
     });
+    h += grupoLinhas(linhasPes) + depoisPes;
     h += "</div>";
 
     // IST: concreto primeiro, 212 por ultimo como "outra IST" -- se a pergunta
     // generica vier na frente, uma negativa por estigma faz o herpes nunca ser
     // perguntado, e herpes muda conduta obstetrica.
     h += '<div class="secao"><div class="secao__titulo">Infecções sexualmente transmissíveis</div>' +
-      linha("Herpes genital", "214", "ist_herg", SIM_NAO) +
-      linha("Verruga genital", "216", "ist_verg", SIM_NAO) +
-      linha("Outra IST diagnosticada?", "212", "ist_mae", SIM_NAO) +
+      grupoLinhas(
+        linha("Herpes genital", "214", "ist_herg", SIM_NAO) +
+        linha("Verruga genital", "216", "ist_verg", SIM_NAO) +
+        linha("Úlcera genital", "215", "ulcg", SIM_NAO) +
+        linha("Outra IST diagnosticada?", "212", "ist_mae", SIM_NAO)) +
       condicional("ist_mae", "sim", "ist_outras",
         campoTexto("ist_outras", "Quais", "213", "g"), "Não");
     if ((get("ist_herg") === "sim" || get("ist_verg") === "sim") && get("ist_mae") === "nao") {
@@ -756,14 +791,10 @@ button { font: inherit; color: inherit; }
         "<b>Herpes e verruga genital são IST, e “Outra IST” está em Não.</b> " +
         "Confira 212 — o sistema não altera sozinho.</div></div>";
     }
-    // 215 e SINAL, nao etiologia: entra como linha daqui, com nota, em vez de
-    // secao propria de um item so.
-    h += linha("Úlcera genital", "215", "ulcg", SIM_NAO) +
-      '<div class="aviso aviso--info" style="margin-top:10px"><span>i</span><div>' +
-      "<b>Úlcera genital não é IST</b> — é sinal, não etiologia. Além de sífilis, herpes e cancro mole, " +
-      "pode ser úlcera de Lipschütz, Behçet, Crohn vulvar ou trauma. “Úlcera: Sim” com “IST: Não” é " +
-      "estado clínico legítimo, e não há validação bloqueando." +
-      "</div></div></div>";
+    // 215 e SINAL, nao etiologia: fica como linha solta do bloco, sem porteiro
+    // de IST. Marcar "Ulcera: Sim" com "IST: Nao" e estado clinico legitimo e
+    // nao ha validacao bloqueando -- ver D-15.
+    h += "</div>";
 
     h += campoArea("outr", "Outras observações sobre ela", "217");
 
@@ -787,24 +818,18 @@ button { font: inherit; color: inherit; }
     h += '<div class="secao__titulo" style="margin-top:16px">Intercorrências em gestações anteriores</div>';
     if (primi) {
       h += '<div class="aviso aviso--info"><span>i</span><div><b>Primigesta.</b>' +
-        "As 14 condições não são exibidas — 14 respostas negativas sobre gestações que não existiram " +
-        "não são a mesma coisa que ausência de intercorrência.</div></div>";
+        "As intercorrências de gestações anteriores não se aplicam.</div></div>";
     } else {
-      h += intercorrencias("ant_", "ant", null, null);
+      h += intercorrencias("ant_", "ant");
     }
     h += campoArea("out3", "Outras observações das gestações anteriores", "317") + "</div>";
 
     h += '<div class="secao" style="margin-top:20px"><div class="secao__titulo">Da família</div>';
+    var linhasFam = "";
     FAMILIARES.forEach(function (c) {
-      h += linha(esc(c.nome), c.cod, "fam_" + c.id, SIM_NAO,
-        c.eco ? "ela: " + rotuloResposta(get("pes_" + c.eco)) : null);
+      linhasFam += linha(esc(c.nome), c.cod, "fam_" + c.id, SIM_NAO);
     });
-    h += '<div class="aviso aviso--info" style="margin-top:10px"><span>i</span><div>' +
-      "<b>Família é seção própria, nunca coluna.</b> Nas 3 condições que a planilha pergunta dos dois " +
-      "lados, o eco em cinza mostra a resposta dela — responde “e na família?” sem criar uma segunda " +
-      "coluna que possa ser lida como se fosse tempo. Note que 208 está como “Hipertensão” e 254 como " +
-      "“Hipertensão crônica”: mesmo conceito, rótulo diferente." +
-      "</div></div>" +
+    h += grupoLinhas(linhasFam) +
       campoArea("out2", "Outras observações familiares", "257") + "</div>";
     return h;
   };
@@ -814,14 +839,15 @@ button { font: inherit; color: inherit; }
        botoes-chip, uma terceira forma visual para a mesma classe de pergunta.
        So o CONTEUDO das opcoes muda, porque aqui a escala e ordinal de verdade. */
     var h = '<h2 class="painel__titulo">Hábitos</h2>' +
-      '<p class="painel__nota">Responde: <b>o que ela faz hoje e que é modificável</b>. É o único bloco ' +
-      "com escala ordinal — “parou ao saber da gravidez” e “fuma hoje” não podem gravar o mesmo valor.</p>";
+      '<p class="painel__nota">O que ela faz hoje e que é modificável.</p>';
 
     h += '<div class="secao">';
+    var linhasHab = "";
     HABITOS.forEach(function (b) {
-      h += linha(esc(b.nome), b.cod, "hab_" + b.id,
+      linhasHab += linha(esc(b.nome), b.cod, "hab_" + b.id,
         [{ v: "nunca", r: "Nunca" }, { v: "parou", r: "Parou" }, { v: "atual", r: "Uso atual" }]);
     });
+    h += grupoLinhas(linhasHab);
     // 155 abre em "Parou" OU "Uso atual" -- e o unico condicional do formulario
     // com dois valores de abertura, por isso nao usa o helper de valor unico.
     var usaDroga = get("hab_drog") === "parou" || get("hab_drog") === "atual";
@@ -836,24 +862,17 @@ button { font: inherit; color: inherit; }
         '<div style="margin-top:6px"><button type="button" class="atalho" data-descartar="droq">' +
         "Descartar o texto</button></div></div></div>" + campoDroga + "</div>";
     }
-    h += '<div class="aviso aviso--atencao" style="margin-top:12px"><span>⚠</span><div>' +
-      "<b>Este bloco não tem atalho de grupo, de propósito.</b> Fumo, álcool e drogas são itens " +
-      "estigmatizados e subnotificados; um botão que varresse as três para “Nunca” transformaria " +
-      "subnotificação em registro afirmativo de ausência." +
-      "</div></div></div>";
-
-    h += '<div class="aviso aviso--info"><span>i</span><div>' +
-      "<b>Medicamentos em uso (150/151) saiu daqui.</b> Não é hábito: é estado presente e alimenta a " +
-      "conduta desta consulta. Foi para <b>Gestação atual</b>, junto das queixas." +
-      "</div></div>";
+    // Sem atalho de grupo, de proposito: fumo, alcool e drogas sao itens
+    // estigmatizados e subnotificados, e um botao que varresse as tres para
+    // "Nunca" transformaria subnotificacao em registro afirmativo de ausencia.
+    h += "</div>";
     return h;
   };
 
   telas.exame = function () {
     var ig = calcIG();
     var h = '<h2 class="painel__titulo">Exame físico</h2>' +
-      '<p class="painel__nota">Cada grupo tem seu próprio atalho “sem alterações”. Não existe botão global: ' +
-      "um toque não deve afirmar que oito sistemas foram examinados.</p>";
+      '<p class="painel__nota">Cada grupo tem seu próprio atalho “sem alterações”.</p>';
 
     // Altura nao esta na planilha; entrou como variavel nova aprovada pela
     // medica, em cm. Fica no fluxo normal das medidas, e o IMC deriva dela.
@@ -869,16 +888,16 @@ button { font: inherit; color: inherit; }
       h += '<div class="campo campo--p campo--derivado"><label>IMC <span class="selo-derivado">calc</span></label>' +
         '<input value="' + imc.toFixed(1) + '" readonly></div>';
     }
-    h += "</div></div>";
+    // D-08: com 405 vazio a CALCULADORA assume 97%, e o campo continua vazio.
+    // Nao existe botao de imputar aqui de proposito -- o botao que existia
+    // gravava 97 em 405, o que tornava o valor assumido indistinguivel de uma
+    // oximetria medida e fazia o cartao de confianca subir para "Alta".
     if (!get("spo2")) {
-      h += '<div class="aviso aviso--erro" style="margin-top:10px"><span>!</span><div>' +
-        "<b>A planilha manda gravar SpO₂ = 97% quando o valor é desconhecido.</b> " +
-        "Gravado no campo, 97% imputado fica idêntico a 97% medido. Aqui o campo continua vazio e a imputação, " +
-        "se você quiser, é marcada junto com o número." +
-        '<div style="margin-top:6px"><button class="atalho" id="imputar">Assumir 97% (não medida)</button></div>' +
-        "</div></div>";
+      h += '<div style="margin-top:8px;font-size:11.5px;color:#93a2b1">' +
+        "SpO₂ em branco: a calculadora assume 97% e marca o valor como assumido." +
+        "</div>";
     }
-    h += "</div>";
+    h += "</div></div>";
 
     // Obstetrico: a IG SINALIZA, nunca esconde. Esconder por IG baixa apagaria o
     // BCF justamente quando a IG foi digitada errada, e quem errou nao saberia.
@@ -886,14 +905,14 @@ button { font: inherit; color: inherit; }
     h += '<div class="secao"><div class="secao__titulo">Obstétrico</div>';
     if (ig && ig.sem < 12) {
       h += '<div class="aviso aviso--info"><span>i</span><div><b>IG de ' + ig.sem + " semanas.</b>" +
-        "Altura uterina, BCF e movimentação fetal podem ainda não ser avaliáveis — os campos continuam " +
-        "abertos, e “não avaliável” é resposta gravada, diferente de deixar em branco.</div></div>";
+        "Altura uterina, BCF e movimentação fetal podem ainda não ser avaliáveis — " +
+        "“não avaliável” é resposta gravada, diferente de deixar em branco.</div></div>";
     }
     h += '<div class="campos">' + campoNum("au", "Altura uterina (cm)", "417", 5, 50) +
       campoNum("bcf", "FCF (bpm)", "419", 60, 220) + "</div>" +
-      linha("Movimentação fetal", "418", "movf",
+      grupoLinhas(linha("Movimentação fetal", "418", "movf",
         [{ v: "normal", r: "Presente" }, { v: "alterado", r: "Ausente" },
-         { v: "naval", r: "Não avaliável" }]);
+         { v: "naval", r: "Não avaliável" }]));
     h += "</div>";
 
     EXAME.forEach(function (grp) {
@@ -902,38 +921,33 @@ button { font: inherit; color: inherit; }
         (grp.semAtalho ? "" :
           '<button type="button" class="atalho' + (todosNormais ? " feito" : "") + '" data-grupo="' + esc(grp.g) +
           '" style="margin-left:auto">' + (todosNormais ? "✓ sem alterações" : "sem alterações") + "</button>") + "</div>";
+      var linhasGrp = "", depoisGrp = "";
       grp.itens.forEach(function (i) {
-        h += linha(esc(i.nome) + (i.normal ? '<small style="display:block;color:#93a2b1;font-size:10.5px">normal: ' +
+        linhasGrp += linha(esc(i.nome) + (i.normal ? '<small style="display:block;color:#93a2b1;font-size:10.5px">normal: ' +
           esc(i.normal) + "</small>" : ""), i.cod, "ex_" + i.id, NORMAL_ALT);
         if (i.det) {
-          h += condicional("ex_" + i.id, "alterado", "exdet_" + i.id,
+          depoisGrp += condicional("ex_" + i.id, "alterado", "exdet_" + i.id,
             campoTexto("exdet_" + i.id, "Quais alterações", i.det, "g"), "Normal");
         }
       });
+      h += grupoLinhas(linhasGrp) + depoisGrp;
       h += "</div>";
     });
 
-    // 421 na planilha e UM campo sim/nao que empacota duas perguntas diferentes.
-    // Fica como esta; a separacao vai marcada como proposta, fora do fluxo.
+    // 421 na planilha e UM campo sim/nao que empacota duas perguntas distintas
+    // (edema, que tem graus e importa na pre-eclampsia; e panturrilha livre, que
+    // e pesquisa de trombose). Fica como esta -- separar seriam duas variaveis
+    // novas, e continua pendente de decisao da medica.
     h += '<div class="secao"><div class="secao__titulo">Membros inferiores</div>' +
-      linha("Sem edema, panturrilhas livres", "421", "ex_mmii", NORMAL_ALT) +
-      '<div class="proposto" style="margin-top:10px">' +
-      '<span class="selo-proposto">fora da planilha</span> ' +
-      '<b style="color:#8a6420">Separar edema de panturrilhas.</b> ' +
-      "421 empacota duas perguntas clínicas distintas num único sim/não: edema tem graus e " +
-      "importa na pré-eclâmpsia; panturrilha livre é pesquisa de trombose. Quando a resposta é " +
-      "“alterado”, hoje não se sabe qual das duas. Separar vira <b>duas</b> variáveis novas — " +
-      "sua decisão.</div></div>";
+      grupoLinhas(linha("Sem edema, panturrilhas livres", "421", "ex_mmii", NORMAL_ALT)) + "</div>";
 
-    // sinais de gravidade, separado do resto
+    // sinais de gravidade, separado do resto: 422 e o unico item do exame em que
+    // "presente" e achado ruim, e alimenta o fullPIERS junto com 403.
     h += '<div class="secao"><div class="secao__titulo" style="color:#a03428">Sinais de gravidade</div>' +
-      linha("Dor torácica", "422", "dorp", [{ v: "nao", r: "Ausente" }, { v: "sim", r: "Presente" }]) +
-      linha("Dispneia", "403", "ex_eupne", [{ v: "normal", r: "Ausente" }, { v: "alterado", r: "Presente" }]) +
-      '<div class="aviso aviso--atencao" style="margin-top:8px"><span>⚠</span><div>' +
-      "<b>422 é o único item do exame físico em que “Sim” é achado ruim.</b> Fica na penúltima linha de uma coluna " +
-      "que se preenche com “Sim, Sim, Sim…”. Aqui saiu do exame e virou bloco próprio, com vocabulário " +
-      "ausente/presente — é insumo do fullPIERS." +
-      "</div></div></div>";
+      grupoLinhas(
+        linha("Dor torácica", "422", "dorp", [{ v: "nao", r: "Ausente" }, { v: "sim", r: "Presente" }]) +
+        linha("Dispneia", "403", "ex_eupne", [{ v: "normal", r: "Ausente" }, { v: "alterado", r: "Presente" }])) +
+      "</div>";
 
     h += campoArea("exobs", "Outras observações do exame", "423");
     return h;
@@ -941,19 +955,19 @@ button { font: inherit; color: inherit; }
 
   telas.labor = function () {
     var h = '<h2 class="painel__titulo">Exames e sorologias</h2>' +
-      '<p class="painel__nota">Tipagem e Rh viram um campo só. As sorologias registram o resultado interpretado, ' +
-      "porque no bloco da planilha o significado de “Sim” muda de linha para linha.</p>";
+      '<p class="painel__nota">As sorologias registram o resultado interpretado, não o marcador bruto.</p>';
 
     // 500 (ABO) e 501 (Rh) sao duas determinacoes distintas e ficam separadas:
     // 5 + 3 opcoes em vez de 9 combinadas, e cada campo grava o que a planilha
     // pede. Fundidos, "A" com Rh em branco era estado impossivel de detectar.
     h += '<div class="secao"><div class="secao__titulo">Tipagem sanguínea</div>' +
-      linha("Grupo ABO", "500", "abo", [
-        { v: "a", r: "A" }, { v: "b", r: "B" }, { v: "ab", r: "AB" },
-        { v: "o", r: "O" }, { v: "nsabe", r: "Não realizada" }]) +
-      linha("Fator Rh", "501", "rh", [
-        { v: "neg", r: "Negativo" }, { v: "pos", r: "Positivo" },
-        { v: "nsabe", r: "Não realizado" }]);
+      grupoLinhas(
+        linha("Grupo ABO", "500", "abo", [
+          { v: "a", r: "A" }, { v: "b", r: "B" }, { v: "ab", r: "AB" },
+          { v: "o", r: "O" }, { v: "nsabe", r: "Não realizada" }]) +
+        linha("Fator Rh", "501", "rh", [
+          { v: "neg", r: "Negativo" }, { v: "pos", r: "Positivo" },
+          { v: "nsabe", r: "Não realizado" }]));
 
     var abo = get("abo"), rh = get("rh");
     if ((abo && abo !== "nsabe") && !rh) {
@@ -966,12 +980,12 @@ button { font: inherit; color: inherit; }
     // Coombs NUNCA some; Rh negativo da realce, nao visibilidade.
     var rhNeg = rh === "neg";
     h += '<div style="margin-top:12px' + (rhNeg ? ";border-left:3px solid #d04b3f;padding-left:10px" : "") + '">' +
-      linha("Coombs indireto", "502", "coombs", [
+      grupoLinhas(linha("Coombs indireto", "502", "coombs", [
         { v: "nao", r: "Negativo" }, { v: "sim", r: "Positivo" },
-        { v: "nsabe", r: "Sem resultado" }]) +
+        { v: "nsabe", r: "Sem resultado" }])) +
       (rhNeg
         ? '<small style="color:#a03428;font-weight:600">Rh negativo — pesquisa de anticorpos irregulares indicada</small>'
-        : '<small style="color:#93a2b1">sempre visível; ganha destaque se o Rh for negativo</small>') +
+        : "") +
       "</div></div>";
 
     h += '<div class="secao"><div class="secao__titulo">Hemograma e bioquímica</div><div class="campos">' +
@@ -984,11 +998,11 @@ button { font: inherit; color: inherit; }
       "</div>" + campoArea("obse", "Observações do hemograma", "506") + "</div>";
 
     h += '<div class="secao"><div class="secao__titulo">Sorologias</div>' +
-      '<table class="grade"><tbody>';
+      '<table class="grade grade--larga"><tbody>';
     SOROLOGIAS.forEach(function (s) {
-      h += '<tr><td class="grade__nome" style="width:32%">' + esc(s.nome) + " " + cod(s.cods) +
+      h += '<tr><td class="grade__nome" style="width:270px">' + esc(s.nome) + " " + cod(s.cods) +
         (s.bruto ? "<small>" + esc(s.bruto) + "</small>" : "") + "</td><td>" +
-        '<div style="display:flex;gap:5px;flex-wrap:wrap">';
+        '<div class="chips">';
       s.op.forEach(function (o) {
         var on = get("soro_" + s.id) === o;
         var estilo = on && o === s.ruim ? "background:#d04b3f;color:#fff;border-color:#d04b3f" : "";
@@ -996,23 +1010,31 @@ button { font: inherit; color: inherit; }
           '" style="' + estilo + '" data-soro="' + s.id + '" data-v="' + esc(o) + '">' + esc(o) + "</button>";
       });
       h += "</div>";
-      if (s.det && get("soro_" + s.id) === s.ruim) {
-        h += '<div style="margin-top:6px">' + campoTexto("sorodet_" + s.id, s.detRot, s.det, "m") + "</div>";
+      // Titulacao do VDRL: SEMPRE visivel. Antes so aparecia depois de marcar
+      // "Reagente" -- campo que so existe depois da resposta certa e campo que
+      // ninguem sabe que existe, e a titulacao e o que define conduta e
+      // seguimento na sifilis.
+      if (s.det) {
+        var temTitulo = get("sorodet_" + s.id);
+        var reagente = get("soro_" + s.id) === s.ruim;
+        h += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px">' +
+          '<label style="font-size:11.5px;color:' + (reagente ? "#a03428;font-weight:700" : "#93a2b1") +
+          '">' + esc(s.detRot) + " " + cod(s.det) + "</label>" +
+          '<input type="text" data-k="sorodet_' + s.id + '" value="' + esc(temTitulo || "") +
+          '" placeholder="ex.: 1:8" style="width:120px;padding:4px 6px;border:1px solid ' +
+          (reagente ? "#d04b3f" : "#c7d0d9") + ';border-radius:3px">' +
+          (reagente && !temTitulo
+            ? '<small style="color:#a03428">reagente sem titulação</small>' : "") +
+          "</div>";
       }
       h += "</td></tr>";
     });
-    h += "</tbody></table>" +
-      '<div class="aviso aviso--info" style="margin-top:10px"><span>i</span><div>' +
-      "<b>Na planilha, “Sim” muda de sentido entre linhas vizinhas.</b> HBsAg reagente é infecção ativa; " +
-      "anti-HBs reagente é imunidade vacinal — duas linhas seguidas, ambas “Hepatite B”, sentidos opostos. " +
-      "O mesmo em toxoplasmose e citomegalovírus (IgG × IgM)." +
-      "</div></div></div>";
+    h += "</tbody></table></div>";
 
     h += '<div class="secao"><div class="secao__titulo">Urina</div>' +
-      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0">' +
-      '<span style="width:170px;color:#2a3f54">EAS ' + cod("510") + "</span>" + tri("eas", NORMAL_ALT) + "</div>" +
-      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0">' +
-      '<span style="width:170px;color:#2a3f54">Urocultura ' + cod("511") + "</span>" + tri("uroc", NORMAL_ALT) + "</div>" +
+      grupoLinhas(
+        linha("EAS", "510", "eas", NORMAL_ALT) +
+        linha("Urocultura", "511", "uroc", NORMAL_ALT)) +
       condicional("uroc", "alterado", "uroq",
         campoTexto("uroq", "Qual microrganismo", "512", "g"), "Normal") + "</div>";
 
@@ -1026,60 +1048,60 @@ button { font: inherit; color: inherit; }
      sumiu. Continua sinalizado como relevante sobretudo com diabetes, mas
      sempre alcancavel em um clique. */
   telas.glice = function () {
-    var temDM = get("atu_dmg") === "sim" || get("ant_dmg") === "sim" || get("pes_diab") === "sim";
     var h = '<h2 class="painel__titulo">Controle glicêmico</h2>' +
-      '<p class="painel__nota">Os 8 campos da planilha (450-457) repetem as mesmas duas perguntas para ' +
-      "quatro momentos do dia. Viram uma grade 4 × 2, com a proporção calculada de volta.</p>";
+      '<p class="painel__nota">Total de medidas e quantas ficaram fora da faixa, por momento do dia. ' +
+      "A proporção é calculada automaticamente.</p>";
 
-    if (!temDM) {
-      h += '<div class="aviso aviso--info"><span>i</span><div>' +
-        "<b>Nenhuma diabetes registrada nesta paciente.</b> O bloco continua aberto e preenchível — " +
-        "só está sinalizado porque, sem diagnóstico, costuma ficar vazio. Marcar diabetes gestacional " +
-        "na grade de intercorrências ou diabetes nos antecedentes não muda nada aqui além de tirar este aviso." +
-        "</div></div>";
-    }
 
+    var somaT = 0, somaA = 0, temSoma = false;
     h += '<table class="grade"><thead><tr><th class="rot">Momento</th>' +
       "<th>Total de medidas</th><th>Alteradas</th><th>Proporção</th></tr></thead><tbody>";
     GLICEMIA.forEach(function (g) {
       var t = parseInt(get("gl_" + g.id + "_t"), 10), a = parseInt(get("gl_" + g.id + "_a"), 10);
-      var prop = (!isNaN(t) && !isNaN(a) && t > 0) ? a + "/" + t + " (" + Math.round(a / t * 100) + "%)" : "—";
       var erro = !isNaN(t) && !isNaN(a) && a > t;
+      var prop;
+      if (erro) {
+        prop = '<b style="color:#d04b3f">alteradas &gt; total</b>';
+      } else if (!isNaN(t) && !isNaN(a) && t > 0) {
+        var pct = Math.round(a / t * 100);
+        somaT += t; somaA += a; temSoma = true;
+        prop = '<b style="font-size:15px;color:#2a3f54">' + pct + "%</b>" +
+          '<small style="color:#93a2b1"> ' + a + " de " + t + "</small>";
+      } else if (!isNaN(t) && t > 0 && isNaN(a)) {
+        prop = '<small style="color:#93a2b1">informe as alteradas</small>';
+      } else {
+        prop = '<span class="vazio">—</span>';
+      }
+      // Campo numerico como texto: ver o comentario em campoNum. Aqui o defeito
+      // aparecia com forca porque a grade redesenha a cada tecla para recalcular
+      // a proporcao.
       h += '<tr><td class="grade__nome">' + esc(g.nome) +
-        "<small>faixa " + esc(g.faixa) + (g.conferir ? ' <span class="selo-alerta">conferir</span>' : "") + "</small></td>" +
-        '<td class="cel"><input type="number" min="0" max="99" style="width:64px;padding:4px" data-gl="' +
+        "<small>faixa " + esc(g.faixa) + "</small></td>" +
+        '<td class="cel"><input type="text" inputmode="numeric" data-num style="width:64px;padding:4px;text-align:center" data-gl="' +
         g.id + '_t" value="' + (get("gl_" + g.id + "_t") || "") + '"> ' + cod(g.tot) + "</td>" +
-        '<td class="cel"><input type="number" min="0" max="99" style="width:64px;padding:4px" data-gl="' +
+        '<td class="cel"><input type="text" inputmode="numeric" data-num style="width:64px;padding:4px;text-align:center" data-gl="' +
         g.id + '_a" value="' + (get("gl_" + g.id + "_a") || "") + '"> ' + cod(g.alt) + "</td>" +
-        '<td class="cel" style="' + (erro ? "color:#d04b3f;font-weight:700" : "") + '">' +
-        (erro ? "alteradas > total" : prop) + "</td></tr>";
+        '<td class="cel">' + prop + "</td></tr>";
     });
+    if (temSoma) {
+      h += '<tr style="background:#f4f6f8"><td class="grade__nome"><b>No período</b></td>' +
+        '<td class="cel"><b>' + somaT + "</b></td><td class=\"cel\"><b>" + somaA + "</b></td>" +
+        '<td class="cel"><b style="font-size:16px;color:#2a3f54">' +
+        Math.round(somaA / somaT * 100) + "%</b></td></tr>";
+    }
     h += "</tbody></table>";
 
-    h += '<div class="aviso aviso--atencao" style="margin-top:14px"><span>⚠</span><div>' +
-      "<b>As faixas de pós almoço e pós jantar estão como 70-300 na planilha.</b> " +
-      "Os valores vieram do Excel e estão aqui como você os escreveu — a dúvida é se 70-300 é a faixa " +
-      "pretendida, já que 300 mg/dL não é alvo pós-prandial e a faixa aparece ao lado do campo como " +
-      "referência para quem preenche e para quem lê depois. Confirmando, eu só removo a marca “conferir”." +
-      "</div></div>";
-
-    h += '<div class="aviso aviso--info" style="margin-top:10px"><span>i</span><div>' +
-      "<b>A proporção é calculada, não digitada.</b> É ela que orienta iniciar ou ajustar insulina, e hoje " +
-      "sai de conta de cabeça em quatro pares por consulta. A grade também avisa se “alteradas” passar de " +
-      "“total” — erro de digitação que hoje segue direto para a decisão." +
-      "</div></div>";
     return h;
   };
 
   telas.vacin = function () {
     var h = '<h2 class="painel__titulo">Vacinas</h2>' +
-      '<p class="painel__nota">Na planilha cada vacina é só uma data. Data vazia hoje confunde três situações ' +
-      "diferentes: não vacinada, vacinada sem cartão, e não perguntado.</p>";
-    h += '<table class="grade"><tbody>';
+      '<p class="painel__nota">Situação de cada vacina; a data entra quando a resposta for “vacinada”.</p>';
+    h += '<table class="grade grade--larga"><tbody>';
     VACINAS.forEach(function (v) {
       var st = get("vac_" + v.id);
-      h += '<tr><td class="grade__nome" style="width:30%">' + esc(v.nome) + " " + cod(v.cod) + "</td><td>" +
-        '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">';
+      h += '<tr><td class="grade__nome" style="width:270px">' + esc(v.nome) + " " + cod(v.cod) + "</td><td>" +
+        '<div class="chips">';
       ["Não vacinada", "Vacinada", "Sem data", "Não informado"].forEach(function (o) {
         h += '<button type="button" class="atalho' + (st === o ? " feito" : "") + '" data-vac="' + v.id + '" data-v="' + esc(o) + '">' + esc(o) + "</button>";
       });
@@ -1088,15 +1110,17 @@ button { font: inherit; color: inherit; }
       }
       h += "</div></td></tr>";
     });
-    h += "</tbody></table>" + campoArea("out5", "Outras vacinas", "606");
+    h += "</tbody></table>" +
+      '<div class="campos" style="margin-top:14px">' + campoArea("out5", "Outras vacinas", "606") + "</div>";
     return h;
   };
 
   telas.condu = function () {
     var h = '<h2 class="painel__titulo">Condutas e encaminhamentos</h2>' +
-      '<p class="painel__nota">O intervalo de retorno é a conduta mais determinante do PNAR. Na planilha ele ' +
-      "está declarado como sim/não — marcar “Sim” registra que há retorno, mas não em quanto tempo.</p>";
+      '<p class="painel__nota">Orientações dadas, exames solicitados e intervalo de retorno.</p>';
 
+    h += '<div class="secao"><div class="secao__titulo">Orientações</div>' +
+      '<div class="linhas-cond">';
     [{ id: "orid", n: "Oriento dieta e controles glicêmico e pressórico", c: "700" },
      { id: "orim", n: "Oriento mobilograma e sinais de trabalho de parto", c: "705" },
      { id: "oris", n: "Oriento sinais de gravidade para hipertensão", c: "706" },
@@ -1107,9 +1131,15 @@ button { font: inherit; color: inherit; }
         (on ? "✓" : "&nbsp;") + "</button>" +
         '<span style="color:#2a3f54">' + esc(o.n) + " " + cod(o.c) + "</span></div>";
     });
+    // Campo livre da conduta, no bloco onde ela e decidida. Usa 708 (Planos), que
+    // ja existe na planilha para exatamente isto -- antes ficava no fim da tela,
+    // depois das ultrassonografias, longe das orientacoes que descreve.
+    h += "</div>" +
+      '<div class="campos" style="margin-top:12px">' +
+      campoArea("plan", "Conduta e plano — descrição livre", "708") + "</div></div>";
 
     h += '<div class="secao" style="margin-top:16px"><div class="secao__titulo">Exames</div>' +
-      linha("Solicito rotina de exames", "701", "solr", SIM_NAO) +
+      grupoLinhas(linha("Solicito rotina de exames", "701", "solr", SIM_NAO)) +
       condicional("solr", "sim", "solq", campoArea("solq", "Quais", "702"), "Não") + "</div>";
 
     var sem = parseInt(get("retorno"), 10);
@@ -1129,48 +1159,46 @@ button { font: inherit; color: inherit; }
     h += '<div class="campos">' + campoData("ageu", "Ultrassom agendado para", "703", "m") + "</div>";
 
     h += '<div class="secao"><div class="secao__titulo">Ultrassonografias</div>' +
+      '<div class="campos">' +
       campoArea("ulto", "Ultrassonografia obstétrica", "650") +
       campoArea("ultm", "Morfológica de 1º trimestre", "651") +
-      campoArea("ult2", "Morfológica de 2º trimestre", "652") + "</div>";
-    h += campoArea("plan", "Planos", "708") + campoArea("outo", "Outras observações", "709");
+      campoArea("ult2", "Morfológica de 2º trimestre", "652") + "</div></div>";
+    h += '<div class="campos">' + campoArea("outo", "Outras observações", "709") + "</div>";
     return h;
   };
 
   /* Linha de condicao: a unidade visual repetida em todo o formulario.
-     `eco` mostra a resposta do outro sujeito em cinza, read-only -- responde
-     "e na familia?" sem criar uma segunda coluna que possa ser lida errada. */
-  function linha(rotulo, codigo, chave, opcoes, eco) {
+
+     O eco read-only ("gestacao anterior: Sim", "ela: Sim") foi REMOVIDO a
+     pedido da medica: durante o atendimento ele competia com a pergunta que
+     estava sendo respondida e tirava o foco. Ele existia como compensacao por
+     ter desfeito a grade de duas colunas; a comparacao entre gestacao anterior
+     e atual volta a ser feita navegando entre os dois blocos. */
+  function linha(rotulo, codigo, chave, opcoes) {
     return '<div class="linha-cond">' +
       // o rotulo pode trazer um <small> com o texto do achado normal; por isso
       // nao passa por esc() -- quem chama e responsavel por escapar o que insere.
       '<span class="linha-cond__rot">' + rotulo + " " + cod(codigo) + "</span>" +
-      tri(chave, opcoes || SIM_NAO) +
-      (eco ? '<span class="linha-cond__eco">' + eco + "</span>" : "") + "</div>";
+      tri(chave, opcoes || SIM_NAO) + "</div>";
   }
 
-  function rotuloResposta(v) {
-    return v === "sim" ? "Sim" : (v === "nao" ? "Não" : "—");
+  /* Agrupa linhas numa grade de 2 colunas quando a tela permite. */
+  function grupoLinhas(html) {
+    return '<div class="linhas-cond">' + html + "</div>";
   }
 
   /* As 14 condicoes renderizadas para UM eixo temporal so. Chamado duas vezes:
-     em Antecedentes (gestacao anterior) e em Gestacao atual (esta gestacao).
-     `eco` traz a resposta do outro eixo em cinza -- e o que sobrou da comparacao
-     horizontal depois que a grade de 2 colunas foi desfeita a pedido da medica. */
-  function intercorrencias(prefixo, campoCod, prefixoEco, rotuloEco) {
+     em Antecedentes (gestacao anterior) e em Gestacao atual (esta gestacao). */
+  function intercorrencias(prefixo, campoCod) {
     var h = "", eixo = null;
     CONDICOES.forEach(function (c) {
       if (c.eixo !== eixo) {
         eixo = c.eixo;
         h += '<div class="sub-eixo">' + esc(eixo) + "</div>";
       }
-      var eco = null;
-      if (prefixoEco) {
-        var v = get(prefixoEco + c.id);
-        eco = rotuloEco + ": " + (v === "sim" ? "Sim" : v === "nao" ? "Não" : v === "nsabe" ? "não sabe" : "—");
-      }
-      h += linha(esc(c.nome), c[campoCod], prefixo + c.id, SIM_NAO_SABE, eco);
+      h += linha(esc(c.nome), c[campoCod], prefixo + c.id, SIM_NAO_SABE);
     });
-    return h;
+    return grupoLinhas(h);
   }
 
   /* ---- campo condicional ------------------------------------------------- */
@@ -1196,9 +1224,17 @@ button { font: inherit; color: inherit; }
     return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + " " + cod(c) + "</label>" +
       '<input type="' + (tipo || "text") + '" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
   }
+  /* NAO usa type="number". Campo numerico que dispara redesenho perdia o cursor:
+     o navegador PROIBE ler selectionStart em type="number" (lanca), entao o
+     render() nao tinha posicao para restaurar, focava o campo e o cursor ia
+     para o inicio. Digitar "80" gravava "08" -- os digitos entravam ao
+     contrario. type="text" + inputmode deixa o cursor legivel, mantem o teclado
+     numerico no celular, e o filtro de entrada abaixo recusa o que nao e
+     numero. */
   function campoNum(k, r, c, min, max) {
     return '<div class="campo campo--p"><label>' + esc(r) + " " + cod(c) + "</label>" +
-      '<input type="number" step="any" min="' + min + '" max="' + max + '" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
+      '<input type="text" inputmode="decimal" data-num data-min="' + min + '" data-max="' + max +
+      '" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
   }
   function campoData(k, r, c, t) {
     return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + " " + cod(c) + "</label>" +
@@ -1265,6 +1301,10 @@ button { font: inherit; color: inherit; }
     var ativo = document.activeElement;
     var foco = ativo && ativo.dataset ? (ativo.dataset.k || ativo.dataset.gl) : null;
     var pos = null;
+    // type="date" e "number" lancam ao ler selectionStart. Nenhum campo que
+    // dispara redesenho pode ser "number" (ver campoNum), mas o guarda fica:
+    // sem posicao para restaurar, o cursor volta para o inicio e a digitacao
+    // sai invertida.
     if (foco && ativo.type !== "date" && ativo.type !== "number") {
       try { pos = ativo.selectionStart; } catch (e) { pos = null; }
     }
@@ -1316,26 +1356,43 @@ button { font: inherit; color: inherit; }
       return;
     }
     if (t.dataset.descartar) { set(t.dataset.descartar, null); render(); return; }
-    if (t.id === "imputar") { set("spo2", "97"); set("spo2_imputada", "1"); render(); return; }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
     if (t.id === "abrir") { document.getElementById("modal").style.display = "flex"; return; }
     if (t.id === "fechar") { tentarFechar(); return; }
     if (t.id === "rascunho") {
       var n = Object.keys(dados).length;
-      alert("Rascunho salvo com " + n + " campo(s) preenchido(s).\n\nSalvar incompleto é sempre possível: bloquear " +
-            "o salvamento durante o atendimento produz preenchimento inventado só para liberar o botão.");
+      alert("Rascunho salvo com " + n + " campo(s) preenchido(s).");
       return;
     }
   });
 
+  /* Recusa o que nao e numero sem mexer no cursor: corrige o valor e recoloca
+     o cursor descontando exatamente o que foi removido antes dele. Substitui a
+     validacao que o type="number" dava de graca. */
+  function filtraNumero(el) {
+    var antes = el.value;
+    var limpo = antes.replace(",", ".").replace(/[^0-9.]/g, "");
+    var ponto = limpo.indexOf(".");
+    if (ponto >= 0) {
+      limpo = limpo.slice(0, ponto + 1) + limpo.slice(ponto + 1).replace(/\./g, "");
+    }
+    if (limpo === antes) { return; }
+    var cur = el.selectionStart;
+    var removidosAntes = 0;
+    for (var i = 0; i < cur && i < antes.length; i++) {
+      if (!/[0-9.,]/.test(antes.charAt(i))) { removidosAntes++; }
+    }
+    el.value = limpo;
+    var novo = Math.max(0, cur - removidosAntes);
+    try { el.setSelectionRange(novo, novo); } catch (e) { /* sem selecao */ }
+  }
+
   document.addEventListener("input", function (ev) {
     var el = ev.target;
+    if (el.hasAttribute && el.hasAttribute("data-num")) { filtraNumero(el); }
     // campos que mudam o que a tela mostra (derivados, avisos, blocos condicionais)
     var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2"];
     if (el.dataset.k) {
-      // Digitar a mao em 405 zera a marca: sem isso, quem clica em "assumir 97%"
-      // e depois digita a oximetria real fica com medicao real rotulada assumida.
-      if (el.dataset.k === "spo2") { set("spo2_imputada", null); }
       set(el.dataset.k, el.value);
       if (el.type === "date" || REDESENHA.indexOf(el.dataset.k) >= 0) { render(); }
       return;
