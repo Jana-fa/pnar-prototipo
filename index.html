@@ -235,11 +235,6 @@ button { font: inherit; color: inherit; }
   border: 1px dashed var(--ambar); border-radius: 3px;
   padding: 8px 10px; background: #fffdf7;
 }
-.selo-proposto {
-  font-size: 9.5px; background: var(--ambar); color: #fff; border-radius: 2px;
-  padding: 1px 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
-}
-
 /* Gramática de linha única: rótulo com largura fixa, controle sempre na mesma
    coluna x, em todos os blocos. Antes o controle caía em 3 posições diferentes
    só dentro de Antecedentes, e isso fazia a tela parecer sem estrutura. */
@@ -477,7 +472,7 @@ button { font: inherit; color: inherit; }
     // (Eupneica) saiu daqui: e a perna da dispneia no fullPIERS e foi para a faixa
     // de sinais de gravidade, junto de 422. Se 422 sai e 403 fica, o mesmo preditor
     // fica partido em dois blocos com polaridades opostas.
-    { g: "Estado geral", semAtalho: true, itens: [
+    { g: "Estado geral", itens: [
       { id: "vigil", nome: "Vígil", cod: "400" }, { id: "orien", nome: "Orientada", cod: "401" },
       { id: "hidra", nome: "Hidratada", cod: "402" },
       { id: "afebr", nome: "Afebril", cod: "404" } ] },
@@ -530,6 +525,12 @@ button { font: inherit; color: inherit; }
     { k: "tgo", n: "TGO", c: "516" }
   ];
 
+  /* Serie de diluicoes dobradas do VDRL. Uma queda de duas diluicoes (ex.: de
+     1:32 para 1:8) e o criterio de resposta ao tratamento, entao a ORDEM da
+     lista carrega significado clinico -- nao reordenar. */
+  var TITULACOES = ["1:1", "1:2", "1:4", "1:8", "1:16", "1:32",
+    "1:64", "1:128", "1:256", "1:512", "≥ 1:1024"];
+
   var ESCOLARIDADE = ["Sem escolaridade", "Fundamental incompleto", "Fundamental completo",
     "Médio incompleto", "Médio completo", "Superior incompleto", "Superior completo",
     "Pós-graduação", "Não informado"];
@@ -559,9 +560,12 @@ button { font: inherit; color: inherit; }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   /* Marca o codigo da planilha ao lado do rotulo. "novo" identifica variavel que
      nao existe no Excel e foi acrescentada com aval da medica. */
+  /* Marca o codigo da planilha ao lado do rotulo. A estatura nao tem codigo
+     (e a unica variavel fora da planilha) e por isso passa null: o selo
+     "variavel nova" saiu da tela a pedido da medica -- e informacao sobre a
+     origem do campo, nao sobre a paciente. */
   function cod(c) {
     if (!c) { return ""; }
-    if (c === "novo") { return '<span class="selo-proposto">variável nova</span>'; }
     return '<span class="marca-planilha">[' + c + "]</span>";
   }
 
@@ -872,14 +876,14 @@ button { font: inherit; color: inherit; }
   telas.exame = function () {
     var ig = calcIG();
     var h = '<h2 class="painel__titulo">Exame físico</h2>' +
-      '<p class="painel__nota">Cada grupo tem seu próprio atalho “sem alterações”.</p>';
+      '<p class="painel__nota">Cada item é respondido no próprio controle.</p>';
 
     // Altura nao esta na planilha; entrou como variavel nova aprovada pela
     // medica, em cm. Fica no fluxo normal das medidas, e o IMC deriva dela.
     var peso = parseFloat(get("peso")), alt = parseFloat(get("estatura"));
     h += '<div class="secao"><div class="secao__titulo">Medidas</div><div class="campos">' +
       campoNum("peso", "Peso (kg)", "406", 30, 200) +
-      campoNum("estatura", "Estatura (cm)", "novo", 130, 200) +
+      campoNum("estatura", "Estatura (cm)", null, 130, 200) +
       campoNum("psist", "PA sistólica (mmHg)", "407", 60, 250) +
       campoNum("pdias", "PA diastólica (mmHg)", "408", 30, 160) +
       campoNum("spo2", "SpO₂ (%)", "405", 50, 100);
@@ -915,12 +919,12 @@ button { font: inherit; color: inherit; }
          { v: "naval", r: "Não avaliável" }]));
     h += "</div>";
 
+    // Sem atalho "sem alteracoes" em nenhum grupo (D-24). Cada item se responde
+    // no proprio controle Normal/Alterado, que ja e um clique. O atalho
+    // acrescentava um segundo caminho para a mesma resposta e obrigava a
+    // escolher entre eles a cada secao -- carga mental sem ganho.
     EXAME.forEach(function (grp) {
-      var todosNormais = grp.itens.every(function (i) { return get("ex_" + i.id) === "normal"; });
-      h += '<div class="secao"><div class="secao__titulo">' + esc(grp.g) +
-        (grp.semAtalho ? "" :
-          '<button type="button" class="atalho' + (todosNormais ? " feito" : "") + '" data-grupo="' + esc(grp.g) +
-          '" style="margin-left:auto">' + (todosNormais ? "✓ sem alterações" : "sem alterações") + "</button>") + "</div>";
+      h += '<div class="secao"><div class="secao__titulo">' + esc(grp.g) + "</div>";
       var linhasGrp = "", depoisGrp = "";
       grp.itens.forEach(function (i) {
         linhasGrp += linha(esc(i.nome) + (i.normal ? '<small style="display:block;color:#93a2b1;font-size:10.5px">normal: ' +
@@ -1010,19 +1014,27 @@ button { font: inherit; color: inherit; }
           '" style="' + estilo + '" data-soro="' + s.id + '" data-v="' + esc(o) + '">' + esc(o) + "</button>";
       });
       h += "</div>";
-      // Titulacao do VDRL: SEMPRE visivel. Antes so aparecia depois de marcar
-      // "Reagente" -- campo que so existe depois da resposta certa e campo que
-      // ninguem sabe que existe, e a titulacao e o que define conduta e
-      // seguimento na sifilis.
+      // Titulacao do VDRL: SEMPRE visivel, e ENTRADA ESTRUTURADA. Como texto
+      // livre chegava "1-23", "1 : 8", "1,8" -- e titulacao e razao, entao
+      // separador errado muda o significado. VDRL se reporta em diluicoes
+      // dobradas, entao a lista E a serie: nao restringe o que o laboratorio
+      // pode informar, so impede escrever a mesma coisa de cinco jeitos.
       if (s.det) {
         var temTitulo = get("sorodet_" + s.id);
         var reagente = get("soro_" + s.id) === s.ruim;
+        var opcoes = TITULACOES.slice();
+        // valor que nao esta na serie nao e descartado em silencio (D-16)
+        if (temTitulo && opcoes.indexOf(temTitulo) < 0) { opcoes.push(temTitulo); }
         h += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px">' +
           '<label style="font-size:11.5px;color:' + (reagente ? "#a03428;font-weight:700" : "#93a2b1") +
           '">' + esc(s.detRot) + " " + cod(s.det) + "</label>" +
-          '<input type="text" data-k="sorodet_' + s.id + '" value="' + esc(temTitulo || "") +
-          '" placeholder="ex.: 1:8" style="width:120px;padding:4px 6px;border:1px solid ' +
-          (reagente ? "#d04b3f" : "#c7d0d9") + ';border-radius:3px">' +
+          '<select data-k="sorodet_' + s.id + '" style="width:132px;padding:4px 6px;border:1px solid ' +
+          (reagente ? "#d04b3f" : "#c7d0d9") + ';border-radius:3px;background:#fff">' +
+          '<option value="">—</option>';
+        opcoes.forEach(function (o) {
+          h += "<option" + (temTitulo === o ? " selected" : "") + ">" + esc(o) + "</option>";
+        });
+        h += "</select>" +
           (reagente && !temTitulo
             ? '<small style="color:#a03428">reagente sem titulação</small>' : "") +
           "</div>";
@@ -1090,6 +1102,19 @@ button { font: inherit; color: inherit; }
         Math.round(somaA / somaT * 100) + "%</b></td></tr>";
     }
     h += "</tbody></table>";
+
+    /* Legenda do calculo. Diz o que o sistema FAZ e, sobretudo, o que ele NAO
+       faz: ele nao classifica glicemia. A contagem de alteradas e informada por
+       quem preenche, comparando cada medida com a faixa. Escrever aqui um
+       limiar de normalidade seria inventar criterio clinico -- e as faixas de
+       pos almoco e pos jantar ainda estao pendentes de confirmacao. */
+    h += '<p style="font-size:11px;color:#93a2b1;margin:10px 0 0;line-height:1.6;max-width:1000px">' +
+      "<b>Como a proporção é calculada:</b> alteradas ÷ total de medidas, por momento do dia. " +
+      "A linha <b>No período</b> soma os quatro momentos e recalcula sobre o total. " +
+      "O sistema <b>não classifica</b> as glicemias: “alteradas” é a contagem que você informa, " +
+      "comparando cada medida com a faixa indicada ao lado do momento. " +
+      "Se “alteradas” passar do total, a linha sinaliza em vermelho e a proporção não é calculada." +
+      "</p>";
 
     return h;
   };
@@ -1346,15 +1371,6 @@ button { font: inherit; color: inherit; }
     if (t.dataset.cond2) { set("cond_" + t.dataset.cond2, get("cond_" + t.dataset.cond2) === "sim" ? null : "sim"); render(); return; }
 
     // atalho por grupo do exame físico
-    if (t.dataset.grupo) {
-      var grp = EXAME.filter(function (g) { return g.g === t.dataset.grupo; })[0];
-      if (grp) {
-        var jaTodos = grp.itens.every(function (i) { return get("ex_" + i.id) === "normal"; });
-        grp.itens.forEach(function (i) { set("ex_" + i.id, jaTodos ? null : "normal"); });
-        render();
-      }
-      return;
-    }
     if (t.dataset.descartar) { set(t.dataset.descartar, null); render(); return; }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
     if (t.id === "abrir") { document.getElementById("modal").style.display = "flex"; return; }
@@ -1387,6 +1403,16 @@ button { font: inherit; color: inherit; }
     try { el.setSelectionRange(novo, novo); } catch (e) { /* sem selecao */ }
   }
 
+  /* Campo de data redesenha aqui, nao em "input": "change" so dispara com a
+     data completa, entao o foco nunca e roubado no meio da digitacao. */
+  document.addEventListener("change", function (ev) {
+    var el = ev.target;
+    if (el.dataset && el.dataset.k && el.type === "date") {
+      set(el.dataset.k, el.value);
+      render();
+    }
+  });
+
   document.addEventListener("input", function (ev) {
     var el = ev.target;
     if (el.hasAttribute && el.hasAttribute("data-num")) { filtraNumero(el); }
@@ -1394,7 +1420,13 @@ button { font: inherit; color: inherit; }
     var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2"];
     if (el.dataset.k) {
       set(el.dataset.k, el.value);
-      if (el.type === "date" || REDESENHA.indexOf(el.dataset.k) >= 0) { render(); }
+      // NAO redesenha em "input" de campo de data. O navegador PROIBE ler
+      // selectionStart em type="date", entao o render() nao tem posicao para
+      // restaurar: ele foca o campo e o cursor volta para o PRIMEIRO segmento.
+      // Digitando 26/08/2026, o "0" do mes sobrescrevia o dia. O redesenho
+      // acontece no evento "change", que so dispara com a data completa --
+      // e e so entao que DPP e IG tem o que derivar.
+      if (REDESENHA.indexOf(el.dataset.k) >= 0) { render(); }
       return;
     }
     if (el.dataset.gl) { set("gl_" + el.dataset.gl, el.value); render(); return; }
