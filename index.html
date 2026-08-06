@@ -174,10 +174,22 @@ button { font: inherit; color: inherit; }
 }
 .tri button:last-child { border-right: 0; }
 .tri button:hover { background: #eef2f5; }
-.tri button.on { color: #fff; font-weight: 600; }
+/* FUNDO PADRAO para qualquer opcao marcada. Sem ele, `color:#fff` valia para
+   TODAS as opcoes mas o fundo so era definido para nao/sim/normal/alterado/
+   nsabe/naval -- entao habitos (nunca/parou/atual), ABO (a/b/ab/o) e Rh
+   (neg/pos) ficavam texto branco sobre fundo branco, ilegiveis. As regras
+   semanticas abaixo sobrescrevem quando ha polaridade clinica; onde nao ha, o
+   azul neutro marca a escolha sem sugerir que ela e boa ou ruim. */
+.tri button.on { background: var(--azul); color: #fff; font-weight: 600; }
 .tri button.on[data-v="nao"], .tri button.on[data-v="normal"] { background: var(--verde); }
 .tri button.on[data-v="sim"], .tri button.on[data-v="alterado"] { background: var(--vermelho); }
 .tri button.on[data-v="nsabe"], .tri button.on[data-v="naval"] { background: #9aa8b5; }
+/* Marcado tem de continuar legivel sob o cursor -- e no toque o :hover COLA
+   ate o proximo toque, entao no celular isso valia o tempo todo. */
+.tri button.on:hover { background: var(--azul); }
+.tri button.on[data-v="nao"]:hover, .tri button.on[data-v="normal"]:hover { background: var(--verde-esc); }
+.tri button.on[data-v="sim"]:hover, .tri button.on[data-v="alterado"]:hover { background: #b53d33; }
+.tri button.on[data-v="nsabe"]:hover, .tri button.on[data-v="naval"]:hover { background: #8996a3; }
 .tri button:focus-visible { outline: 2px solid var(--azul); outline-offset: -2px; z-index: 1; }
 
 /* --- grade de condições --------------------------------------------------- */
@@ -216,6 +228,9 @@ button { font: inherit; color: inherit; }
 }
 .atalho:hover { background: var(--verde-fraco); }
 .atalho.feito { background: var(--verde); color: #fff; }
+/* No toque o :hover cola apos o tap; sem isto o chip escolhido ficava com fundo
+   claro e texto branco. */
+.atalho.feito:hover { background: var(--verde-esc); color: #fff; }
 
 .aviso {
   border-radius: 3px; padding: 9px 12px; font-size: 12px; margin-bottom: 14px;
@@ -295,8 +310,12 @@ button { font: inherit; color: inherit; }
 /* justify-items:start e obrigatorio -- sem ele o track `auto` absorve o espaco
    livre da coluna e o controle estica: "Nao | Sim | Nao sabe" chegava a 330px,
    com o ultimo botao tres vezes maior que o primeiro. */
+/* A largura da coluna de rotulos e MEDIDA por grupo (ver ajustarRotulos): fica
+   do tamanho do rotulo mais longo daquele grupo, nunca 300px fixos. Fixa,
+   "Epilepsia" ficava a 200px do proprio controle. Continua sendo UMA largura
+   por grupo, e nao por linha, senao os controles deixariam de alinhar. */
 .linha-cond {
-  display: grid; grid-template-columns: 300px auto;
+  display: grid; grid-template-columns: var(--rot, 300px) auto;
   align-items: center; justify-items: start; gap: 14px;
   padding: 6px 0; border-bottom: 1px solid #f0f3f5;
 }
@@ -356,12 +375,36 @@ button { font: inherit; color: inherit; }
 @media (max-width: 1100px) {
   .linhas-cond { grid-template-columns: 1fr; }
 }
+/* Desktop-first: o celular nao e o alvo, mas tem de FUNCIONAR. Medido em 390px
+   antes desta regra: painel de 296px com 560px de conteudo, e o primeiro chip
+   comecando em x=210 com 152px -- metade da fileira saia da tela.
+   As colunas fixas de 152px viram colunas elasticas, e as tabelas de sorologia
+   e vacina deixam de ser lado-a-lado: o rotulo sobe e os chips ficam embaixo,
+   com a largura toda. */
 @media (max-width: 860px) {
   .trilho { width: 54px; }
   .trilho__item span.rotulo { display: none; }
   .campos { grid-template-columns: 1fr; }
   .campo--g { grid-column: span 1; }
-  .chips .atalho { min-width: 0; flex: 1 1 auto; }
+  .painel { padding: 14px 12px 24px; }
+
+  .chips { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
+  .chips .atalho { font-size: 12px; padding: 8px 6px; }
+
+  .grade, .grade--larga { max-width: none; }
+  /* O controle glicemico e a UNICA tabela cujas colunas significam algo
+     (momento x total x alteradas x proporcao). Empilhar destruiria a leitura,
+     entao ela rola dentro do proprio contêiner -- a pagina nao rola junto. */
+  .rolagem-tabela { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .rolagem-tabela .grade { min-width: 460px; }
+  .grade--larga tr { display: block; border-bottom: 1px solid var(--borda); padding: 8px 0; }
+  .grade--larga td { display: block; width: auto !important; padding: 2px 0; }
+  .grade--larga .grade__nome { font-weight: 600; margin-bottom: 6px; }
+
+  /* rotulo em cima do controle, largura toda */
+  .linha-cond { grid-template-columns: 1fr; gap: 6px; }
+  .tri { display: flex; width: 100%; }
+  .tri button { flex: 1 1 0; padding: 9px 4px; font-size: 12px; }
 }
 </style>
 
@@ -1097,7 +1140,8 @@ button { font: inherit; color: inherit; }
 
 
     var somaT = 0, somaA = 0, temSoma = false;
-    h += '<table class="grade"><thead><tr><th class="rot">Momento</th>' +
+    h += '<div class="rolagem-tabela">' +
+      '<table class="grade"><thead><tr><th class="rot">Momento</th>' +
       "<th>Total de medidas</th><th>Alteradas</th><th>Proporção</th></tr></thead><tbody>";
     GLICEMIA.forEach(function (g) {
       var t = parseInt(get("gl_" + g.id + "_t"), 10), a = parseInt(get("gl_" + g.id + "_a"), 10);
@@ -1132,7 +1176,7 @@ button { font: inherit; color: inherit; }
         '<td class="cel"><b style="font-size:16px;color:#2a3f54">' +
         Math.round(somaA / somaT * 100) + "%</b></td></tr>";
     }
-    h += "</tbody></table>";
+    h += "</tbody></table></div>";
 
     /* Legenda do calculo. Diz o que o sistema FAZ e, sobretudo, o que ele NAO
        faz: ele nao classifica glicemia. A contagem de alteradas e informada por
@@ -1364,6 +1408,27 @@ button { font: inherit; color: inherit; }
       (faltam ? "faltam " + faltam + " insumos" : "insumos completos") + " — abrir</button>";
   }
 
+  /* Ajusta a coluna de rotulos de cada grupo a largura do rotulo MAIS LONGO
+     dali. Em duas passadas: primeiro `max-content`, que faz cada linha medir o
+     proprio rotulo, depois o maximo do grupo aplicado a todas -- assim o rotulo
+     nao fica solto e o controle continua alinhado (D-05).
+     O teto impede que um rotulo excepcional empurre os controles para fora;
+     o piso evita coluna estreita demais em grupo de rotulos curtos. */
+  var ROT_MIN = 130, ROT_MAX = 400;
+  function ajustarRotulos() {
+    var grupos = painel.querySelectorAll(".linhas-cond");
+    for (var i = 0; i < grupos.length; i++) {
+      var g = grupos[i];
+      g.style.setProperty("--rot", "max-content");
+      var rots = g.querySelectorAll(".linha-cond__rot"), maior = 0;
+      for (var j = 0; j < rots.length; j++) {
+        maior = Math.max(maior, Math.ceil(rots[j].getBoundingClientRect().width));
+      }
+      g.style.setProperty("--rot",
+        Math.min(ROT_MAX, Math.max(ROT_MIN, maior)) + "px");
+    }
+  }
+
   /* Redesenhar troca o HTML do painel, o que tira o foco do campo em que a
      pessoa esta digitando. Guardamos qual era e devolvemos o cursor.          */
   function render() {
@@ -1379,6 +1444,7 @@ button { font: inherit; color: inherit; }
     }
 
     painel.innerHTML = telas[blocoAtivo] ? telas[blocoAtivo]() : "";
+    ajustarRotulos();
     desenhaTrilho();
     desenhaPiers();
     var ig = calcIG();
