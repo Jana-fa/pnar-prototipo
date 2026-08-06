@@ -751,7 +751,8 @@ button { font: inherit; color: inherit; }
 
     h += '<div class="campo campo--m campo--derivado"><label>Data provável do parto ' + cod("351") +
       ' <span class="selo-derivado">por DUM</span></label>' +
-      '<input value="' + (dpp ? fmtData(dpp) : "") + '" readonly placeholder="informe a DUM">' +
+      '<input data-derivado="dpp" value="' + (dpp ? fmtData(dpp) : "") +
+      '" readonly placeholder="informe a DUM">' +
       '<span class="campo__dica">regra de Naegele: DUM + 280 dias</span></div>';
 
     h += '<div class="campo campo--m' + (igInf ? "" : " campo--derivado") + '"><label>Idade gestacional ' + cod("352/353") +
@@ -1448,13 +1449,47 @@ button { font: inherit; color: inherit; }
 
   /* Campo de data redesenha aqui, nao em "input": "change" so dispara com a
      data completa, entao o foco nunca e roubado no meio da digitacao. */
+  /* Atualiza so o que DERIVA da DUM, sem trocar o HTML do painel. Existe para
+     que o campo de data possa dar retorno imediato sem ser recriado embaixo do
+     dedo de quem digita. */
+  function atualizarDerivados() {
+    var ig = calcIG(), dpp = calcDPP(), igInf = get("ig_informada");
+    var topo = document.getElementById("topo-ig");
+    if (topo) { topo.textContent = igInf || (ig ? ig.sem + "s " + ig.dias + "d" : "—"); }
+    var alvoDpp = painel.querySelector('[data-derivado="dpp"]');
+    if (alvoDpp) { alvoDpp.value = dpp ? fmtData(dpp) : ""; }
+    var alvoIg = document.getElementById("ig-campo");
+    if (alvoIg && !igInf) { alvoIg.value = ig ? ig.sem + "s " + ig.dias + "d" : ""; }
+  }
+
+  /* CAMPO DE DATA: nunca redesenhar enquanto ele tem o foco.
+     O navegador dispara "change" a CADA tecla depois que a data fica valida --
+     nao uma vez no fim. Redesenhar ali troca o no do DOM e devolve o cursor ao
+     primeiro segmento, entao digitar 01/06/2026 fazia os dois ultimos digitos
+     caírem no DIA, que passava a mostrar 26. Aqui o "change" so atualiza os
+     derivados no lugar; o redesenho completo espera o "blur", quando a pessoa
+     ja saiu do campo e nao ha cursor a perder. */
   document.addEventListener("change", function (ev) {
     var el = ev.target;
     if (el.dataset && el.dataset.k && el.type === "date") {
       set(el.dataset.k, el.value);
-      render();
+      atualizarDerivados();
     }
   });
+
+  /* No blur o campo tambem NAO redesenha. A primeira versao redesenhava aqui, e
+     isso comia cliques: sair do campo clicando num bloco do trilho disparava o
+     blur, que reconstruia o trilho, e o clique morria no botao que tinha
+     acabado de ser substituido. Redesenho completo so nas interacoes que ja
+     redesenham por conta propria -- e ate la os derivados ja estao certos.
+     blur nao borbulha: precisa de captura. */
+  document.addEventListener("blur", function (ev) {
+    var el = ev.target;
+    if (el.dataset && el.dataset.k && el.type === "date") {
+      set(el.dataset.k, el.value);
+      atualizarDerivados();
+    }
+  }, true);
 
   document.addEventListener("input", function (ev) {
     var el = ev.target;
