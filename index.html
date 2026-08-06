@@ -436,6 +436,11 @@ button { font: inherit; color: inherit; }
      E so existe UMA tabela no formulario inteiro: a grade obstetrica, cujas
      colunas sempre significam TEMPO. Sujeito nunca vira coluna -- misturar
      "quem" e "quando" na mesma forma visual e o erro que essa auditoria corrige. */
+  /* 218, 219 e 220 sao variaveis NOVAS, fora da planilha, aprovadas pela medica:
+     doenca renal cronica e doenca autoimune sao fatores de ALTO risco para
+     pre-eclampsia e nao existiam entre as 157. A autoimune e generica de
+     proposito -- cobre lupus e fecha a lacuna da SAF, que so existia como
+     intercorrencia de gestacao (313/363) e nunca como diagnostico dela. */
   var PESSOAIS = [
     { id: "aler", nome: "Alergias", cod: "200", det: "201" },
     { id: "canc", nome: "Câncer", cod: "202", det: "203" },
@@ -444,6 +449,12 @@ button { font: inherit; color: inherit; }
     { id: "epil", nome: "Epilepsia", cod: "207" },
     { id: "hipe", nome: "Hipertensão crônica", cod: "208", par: "família" },
     { id: "infe", nome: "Infertilidade", cod: "209" },
+    { id: "renal", nome: "Doença renal crônica", cod: null },
+    // det: true = tem condicional "quais" mas SEM codigo de planilha (variavel
+    // nova). Nas demais linhas det carrega o proprio codigo, que serve de porta
+    // e de rotulo ao mesmo tempo.
+    { id: "autoimune", nome: "Doença autoimune", cod: null, det: true,
+      dica: "lúpus, SAF, outra" },
     { id: "tran", nome: "Transfusão", cod: "210" },
     { id: "tube", nome: "Tuberculose", cod: "211", par: "família" }
   ];
@@ -607,6 +618,15 @@ button { font: inherit; color: inherit; }
     return p[2] + "/" + p[1] + "/" + p[0];
   }
 
+  /* Intervalo entre gestacoes, derivado do ano do ultimo parto (318).
+     Contra o ano corrente enquanto nao existe data_consulta (pendencia 15). */
+  function intervaloPartos() {
+    var ano = parseInt(get("ano_ult_parto"), 10);
+    if (isNaN(ano)) { return null; }
+    var d = new Date().getFullYear() - ano;
+    return (d < 0 || d > 60) ? null : d;
+  }
+
   /* ---- desenho dos blocos ------------------------------------------------ */
   var telas = {};
 
@@ -747,6 +767,10 @@ button { font: inherit; color: inherit; }
 
     h += "</div>";
 
+    // 370 e CARACTERISTICA desta gestacao, nao intercorrencia -- por isso fica
+    // junto de DUM/DPP/IG. Nao confundir com 253, gestacao gemelar na FAMILIA.
+    h += grupoLinhas(linha("Gestação múltipla", null, "gest_multipla", SIM_NAO));
+
     h += '<div class="secao"><div class="secao__titulo">Intercorrências nesta gestação</div>' +
       '<p style="font-size:11.5px;color:#93a2b1;margin:0 0 8px">' +
       "Registra o que ocorreu <b>até</b> esta consulta, não apenas o que está ativo agora." +
@@ -770,10 +794,12 @@ button { font: inherit; color: inherit; }
     h += '<div class="secao"><div class="secao__titulo">Dela</div>';
     var linhasPes = "", depoisPes = "";
     PESSOAIS.forEach(function (c) {
-      linhasPes += linha(esc(c.nome), c.cod, "pes_" + c.id, SIM_NAO);
+      var rot = esc(c.nome) + (c.dica
+        ? '<small style="display:block;color:#93a2b1;font-size:10.5px">' + esc(c.dica) + "</small>" : "");
+      linhasPes += linha(rot, c.cod, "pes_" + c.id, SIM_NAO);
       if (c.det) {
         depoisPes += condicional("pes_" + c.id, "sim", "det_" + c.id,
-          campoTexto("det_" + c.id, "Quais", c.det, "g"), "Não");
+          campoTexto("det_" + c.id, "Quais", c.det === true ? null : c.det, "g"), "Não");
       }
     });
     h += grupoLinhas(linhasPes) + depoisPes;
@@ -811,7 +837,13 @@ button { font: inherit; color: inherit; }
       '<div class="campos">' +
       campoNum("ng", "Nº de gestações", "300", 0, 20) +
       campoNum("np", "Nº de partos", "301", 0, 20) +
-      campoNum("na", "Nº de abortos", "302", 0, 20) + "</div>";
+      campoNum("na", "Nº de abortos", "302", 0, 20) +
+      // Grava o ANO, nao o intervalo: intervalo apurado hoje envelhece e passa a
+      // mentir no retorno; ano nao. O intervalo entre gestacoes e fator de risco
+      // moderado para pre-eclampsia, e aqui e derivado.
+      campoNum("ano_ult_parto", "Ano do último parto", null, 1950, 2100,
+        intervaloPartos() === null ? null : "intervalo de " + intervaloPartos() + " anos") +
+      "</div>";
     var np = parseInt(get("np"), 10), na = parseInt(get("na"), 10);
     if (!isNaN(ng) && !isNaN(np) && !isNaN(na) && np + na > ng) {
       h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
@@ -1414,7 +1446,7 @@ button { font: inherit; color: inherit; }
     var el = ev.target;
     if (el.hasAttribute && el.hasAttribute("data-num")) { filtraNumero(el); }
     // campos que mudam o que a tela mostra (derivados, avisos, blocos condicionais)
-    var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2"];
+    var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2", "ano_ult_parto"];
     if (el.dataset.k) {
       set(el.dataset.k, el.value);
       // NAO redesenha em "input" de campo de data. O navegador PROIBE ler
