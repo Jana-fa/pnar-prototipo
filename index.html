@@ -672,6 +672,57 @@ button { font: inherit; color: inherit; }
     return (d < 0 || d > 60) ? null : d;
   }
 
+  /* ====================================================================== *
+     fullPIERS — von Dadelszen et al., Lancet 2011.
+
+     logit(pi) = 2,68
+               + (-5,41e-2 x IG)        IG em SEMANAS (decimal)
+               + ( 1,23   x DorDisp)    1 se dor toracica E/OU dispneia
+               + (-2,71e-2 x Cr)        creatinina em umol/L
+               + ( 2,07e-1 x Plt)       plaquetas em x10^9/L
+               + ( 4,00e-5 x Plt^2)
+               + ( 1,01e-2 x AST)       TGO/AST em U/L
+               + (-3,05e-6 x AST^2)
+               + ( 2,50e-4 x Cr x Plt)
+               + (-6,99e-5 x Plt x AST)
+               + (-2,56e-3 x Plt x SpO2)
+     p = 1 / (1 + e^-logit)
+
+     CONVERSAO DE UNIDADE. O formulario coleta creatinina em mg/dL, que e o
+     padrao brasileiro; o modelo pede umol/L. O fator e 88,4. Plaquetas em
+     mil/mm3 JA equivalem a x10^9/L (1 mm3 = 1 uL, entao 10^3/uL = 10^9/L) e nao
+     sao convertidas. TGO ja esta em U/L. A tela mostra o valor convertido ao
+     lado do digitado, para a conta ser conferivel sem sair da consulta.
+
+     A IG entra em SEMANAS, nao em dias -- verificado numericamente: em dias
+     todo caso colapsa para probabilidade ~0, o que nao reproduz a distribuicao
+     publicada (65% abaixo de 2,5%, 4% acima de 30%). Em semanas reproduz.
+   * ====================================================================== */
+  var CREAT_MGDL_PARA_UMOLL = 88.4;
+
+  function fullPiers(igSem, dorDisp, crUmol, plt, ast, spo2) {
+    var l = 2.68 +
+      (-5.41e-2 * igSem) +
+      (1.23 * dorDisp) +
+      (-2.71e-2 * crUmol) +
+      (2.07e-1 * plt) +
+      (4.00e-5 * plt * plt) +
+      (1.01e-2 * ast) +
+      (-3.05e-6 * ast * ast) +
+      (2.50e-4 * crUmol * plt) +
+      (-6.99e-5 * plt * ast) +
+      (-2.56e-3 * plt * spo2);
+    return 1 / (1 + Math.exp(-l));
+  }
+
+  /* Faixas do proprio artigo: baixo < 2,5%, alto >= 30%. Nao sao limiares de
+     conduta inventados aqui -- sao os cortes com que o modelo foi publicado. */
+  function faixaPiers(p) {
+    if (p >= 0.30) { return { rot: "Risco alto", cor: "ruim" }; }
+    if (p >= 0.025) { return { rot: "Risco intermediário", cor: "medio" }; }
+    return { rot: "Risco baixo", cor: "bom" };
+  }
+
   /* ---- desenho dos blocos ------------------------------------------------ */
   var telas = {};
 
@@ -692,20 +743,65 @@ button { font: inherit; color: inherit; }
     var spo2Imputada = !spo2Medida;
     var spo2Usada = spo2Medida || "97";
 
+    /* Insumos do modelo, ja convertidos. igSem em semanas decimais; a IG
+       informada por USG ("24s 3d") tem de ser interpretada, e se nao der para
+       ler o numero o insumo conta como ausente em vez de virar zero. */
+    var igCalc = calcIG(), igInfTxt = get("ig_informada"), igSem = null;
+    if (igInfTxt) {
+      var m = String(igInfTxt).match(/(\d+)\s*s(?:em)?\D*(\d+)?/i);
+      if (m) { igSem = parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 7 : 0); }
+    } else if (igCalc) {
+      igSem = igCalc.sem + igCalc.dias / 7;
+    }
+
+    var crMgdl = parseFloat(get("creat"));
+    var crUmol = isNaN(crMgdl) ? null : crMgdl * CREAT_MGDL_PARA_UMOLL;
+    var plt = parseFloat(get("plaq"));          // mil/mm3 == x10^9/L
+    var ast = parseFloat(get("tgo"));           // U/L
+    var spo2Num = parseFloat(spo2Usada);
+
+    /* Dor toracica E/OU dispneia e UM preditor composto, alimentado por dois
+       campos (422 e 403). Presente em qualquer um basta para valer 1. Mas
+       "ausente num, nao perguntado no outro" NAO da 0: seria transformar
+       ausencia de pergunta em negativa, que e o que D-06 proibe. */
+    var dorp = get("dorp"), disp = get("ex_eupne");
+    var dorDisp = null;
+    if (dorp === "sim" || disp === "alterado") { dorDisp = 1; }
+    else if (dorp === "nao" && disp === "normal") { dorDisp = 0; }
+
     var estado = PIERS.map(function (i) {
       if (i.k === "spo2") { return { i: i, tem: true, imputado: spo2Imputada, valor: spo2Usada + "%" }; }
       if (i.k === "ig") {
-        var ig = calcIG();
-        var v = get("ig_informada") || (ig ? ig.sem + "s " + ig.dias + "d" : null);
-        return { i: i, tem: !!v, imputado: false, valor: v };
+        var v = igInfTxt || (igCalc ? igCalc.sem + "s " + igCalc.dias + "d" : null);
+        return { i: i, tem: igSem !== null, imputado: false, valor: v };
       }
       var g = get(i.k);
       // dor toracica e dispneia guardam o valor interno; a lista mostra o rotulo.
       var ROTULO = { nao: "Ausente", sim: "Presente", normal: "Ausente", alterado: "Presente" };
+      // numericos mostram a conversao para a unidade do modelo, para conferencia
+      if (i.k === "creat" && crUmol !== null) {
+        return { i: i, tem: true, imputado: false,
+                 valor: crMgdl + " mg/dL = " + crUmol.toFixed(0) + " µmol/L" };
+      }
+      if (i.k === "plaq" && !isNaN(plt)) {
+        return { i: i, tem: true, imputado: false, valor: plt + " mil/mm³ = " + plt + " ×10⁹/L" };
+      }
+      if (i.k === "tgo" && !isNaN(ast)) {
+        return { i: i, tem: true, imputado: false, valor: ast + " U/L" };
+      }
+      if (i.k === "dorp" || i.k === "ex_eupne") {
+        return { i: i, tem: !!g, imputado: false, valor: ROTULO[g] || g };
+      }
       return { i: i, tem: !!g, imputado: false, valor: ROTULO[g] || g };
     });
     var faltando = estado.filter(function (x) { return !x.tem; });
     var medidos = estado.filter(function (x) { return x.tem && !x.imputado; }).length;
+
+    // Calcula so com TODOS os insumos do modelo presentes. Faltando um, nao ha
+    // numero -- imputar o resto seria inventar a paciente.
+    var pode = igSem !== null && dorDisp !== null && crUmol !== null &&
+               !isNaN(plt) && !isNaN(ast) && !isNaN(spo2Num);
+    var prob = pode ? fullPiers(igSem, dorDisp, crUmol, plt, ast, spo2Num) : null;
 
     // Sem porteiro por 361: a medica determinou que a calculadora roda em todo
     // caso que tenha os dados. A pressuposicao de pre-eclampsia do modelo
@@ -733,31 +829,38 @@ button { font: inherit; color: inherit; }
        empilhadas com tres paragrafos corridos -- quem esta atendendo nao le
        paragrafo, varre. Cada ressalva virou um topico curto, e o nivel de
        confianca virou selo ao lado do resultado, que e onde o olho ja esta. */
-    var nivel, cor, topicos = [];
-    if (faltando.length) {
-      nivel = "Insuficiente";
+    var cor, selo, valorTxt, topicos = [];
+    if (!pode) {
       cor = "ruim";
-      topicos.push("<b>Faltam " + faltando.length + " de " + PIERS.length + ":</b> " +
-        esc(faltando.map(function (x) { return x.i.n; }).join(", ")));
-    } else if (spo2Imputada) {
-      nivel = "Moderada";
-      cor = "medio";
-      topicos.push("<b>SpO₂ assumida em 97%</b>, não medida — erro cai para o lado tranquilizador");
+      selo = "Sem cálculo";
+      valorTxt = "—";
+      var quem = faltando.map(function (x) { return x.i.n; });
+      if (dorDisp === null && quem.indexOf("Dor torácica") < 0 && quem.indexOf("Dispneia") < 0) {
+        quem.push("dor torácica e/ou dispneia");
+      }
+      topicos.push("<b>Falta preencher:</b> " + esc(quem.join(", ")));
     } else {
-      nivel = "Alta";
-      cor = "bom";
-      topicos.push("Os " + PIERS.length + " insumos medidos, nenhum assumido");
+      var f = faixaPiers(prob);
+      cor = f.cor;
+      selo = f.rot;
+      valorTxt = (prob * 100).toFixed(prob < 0.1 ? 1 : 0).replace(".", ",") + "%";
+      topicos.push("Faixas do artigo: <b>baixo</b> abaixo de 2,5% · <b>alto</b> a partir de 30%");
+      if (spo2Imputada) {
+        topicos.push("<b>SpO₂ assumida em 97%</b>, não medida — o erro cai para o lado tranquilizador");
+      }
+      if (crUmol !== null) {
+        topicos.push("Creatinina convertida de mg/dL para <b>µmol/L</b> (×88,4), que é a unidade do modelo");
+      }
     }
-    topicos.push("Equação publicada <b>não implementada</b> — faltam os coeficientes do artigo");
+    topicos.push("Prevê as próximas <b>48 h</b>; o desempenho cai a cada dia");
     topicos.push("AUROC <b>0,68</b> em validação externa, contra 0,88 na derivação");
-    topicos.push("Prevê as próximas <b>48 h</b>; desempenho cai a cada dia");
     topicos.push("Derivado em gestantes <b>internadas</b> com pré-eclâmpsia");
 
     h += '<div class="cartao-calc cartao-calc--' + cor + '">' +
       '<div class="cartao-calc__topo">' +
       '<div><div class="cartao-calc__rot">Probabilidade de desfecho adverso</div>' +
-      '<div class="cartao-calc__valor">— não calculado</div></div>' +
-      '<span class="cartao-calc__nivel">' + esc(nivel) + "</span></div>" +
+      '<div class="cartao-calc__valor">' + valorTxt + "</div></div>" +
+      '<span class="cartao-calc__nivel">' + esc(selo) + "</span></div>" +
       '<ul class="cartao-calc__notas"><li>' + topicos.join("</li><li>") + "</li></ul>" +
       "</div>";
 
@@ -867,37 +970,57 @@ button { font: inherit; color: inherit; }
 
     h += campoArea("outr", "Outras observações sobre ela", "217");
 
-    // Gestacoes anteriores e antecedente: entra aqui como secao micro. G/P/A vem
-    // junto porque e ele que decide se a paciente e primigesta, e a decisao tem
-    // que ser local -- nao a duas telas de distancia.
+    // Gestacoes anteriores e antecedente: entra aqui como secao micro.
     var ng = parseInt(get("ng"), 10);
-    var primi = ng === 0;
+    /* A pergunta explicita substitui a deducao por 300 = 0. Deduzir confundia
+       "nunca engravidou" com "nao perguntei" -- e o mesmo defeito que D-06
+       proibe nos itens sim/nao. Todo o resto do bloco depende da resposta. */
     h += '<div class="secao" style="margin-top:20px"><div class="secao__titulo">Gestações anteriores</div>' +
-      '<div class="campos">' +
-      campoNum("ng", "Nº de gestações", "300", 0, 20) +
-      campoNum("np", "Nº de partos", "301", 0, 20) +
-      campoNum("na", "Nº de abortos", "302", 0, 20) +
-      // Grava o ANO, nao o intervalo: intervalo apurado hoje envelhece e passa a
-      // mentir no retorno; ano nao. O intervalo entre gestacoes e fator de risco
-      // moderado para pre-eclampsia, e aqui e derivado.
-      campoNum("ano_ult_parto", "Ano do último parto", null, 1950, 2100,
-        intervaloPartos() === null ? null : "intervalo de " + intervaloPartos() + " anos") +
-      "</div>";
-    var np = parseInt(get("np"), 10), na = parseInt(get("na"), 10);
-    if (!isNaN(ng) && !isNaN(np) && !isNaN(na) && np + na > ng) {
-      h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
-        "<b>Partos + abortos (" + (np + na) + ") passa do nº de gestações (" + ng + ").</b>" +
-        "Aviso apenas — não bloqueia o salvamento.</div></div>";
-    }
+      grupoLinhas(linha("Já teve gestação anterior?", null, "gest_ant", SIM_NAO));
 
-    h += '<div class="secao__titulo" style="margin-top:16px">Intercorrências em gestações anteriores</div>';
-    if (primi) {
-      h += '<div class="aviso aviso--info"><span>i</span><div><b>Primigesta.</b>' +
-        "As intercorrências de gestações anteriores não se aplicam.</div></div>";
+    var teveGest = get("gest_ant") === "sim";
+    // Chaves do bloco, para saber se ha dado preenchido escondido atras do "Nao".
+    var CHAVES_GEST = ["ng", "np", "na", "ano_ult_parto", "out3"];
+    CONDICOES.forEach(function (c) { CHAVES_GEST.push("ant_" + c.id); });
+
+    if (teveGest) {
+      var np = parseInt(get("np"), 10), na = parseInt(get("na"), 10);
+      // O ano do ultimo parto so faz sentido se houve parto: com np = 0 (so
+      // abortos) nao existe ultimo parto para datar.
+      var houveParto = !isNaN(np) && np > 0;
+      h += '<div class="campos" style="margin-top:10px">' +
+        campoNum("ng", "Nº de gestações", "300", 0, 20) +
+        campoNum("np", "Nº de partos", "301", 0, 20) +
+        campoNum("na", "Nº de abortos", "302", 0, 20) +
+        // Grava o ANO, nao o intervalo: intervalo apurado hoje envelhece e passa
+        // a mentir no retorno; ano nao.
+        (houveParto
+          ? campoNum("ano_ult_parto", "Ano do último parto", null, 1950, 2100,
+              intervaloPartos() === null ? null : "intervalo de " + intervaloPartos() + " anos")
+          : "") +
+        "</div>";
+      if (!isNaN(ng) && !isNaN(np) && !isNaN(na) && np + na > ng) {
+        h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
+          "<b>Partos + abortos (" + (np + na) + ") passa do nº de gestações (" + ng + ").</b>" +
+          "Aviso apenas — não bloqueia o salvamento.</div></div>";
+      }
+      h += '<div class="secao__titulo" style="margin-top:16px">Intercorrências em gestações anteriores</div>' +
+        intercorrencias("ant_", "ant") +
+        campoArea("out3", "Outras observações das gestações anteriores", "317");
     } else {
-      h += intercorrencias("ant_", "ant");
+      // Nada e apagado em silencio (D-16): se ha dado preenchido e a resposta
+      // virou "Nao", o bloco avisa e oferece o descarte explicito.
+      var orfaos = CHAVES_GEST.filter(function (k) { return get(k); });
+      if (orfaos.length) {
+        h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
+          "<b>Há " + orfaos.length + " campo(s) preenchido(s) de gestações anteriores.</b>" +
+          "A resposta acima está em “Não” e eles deixaram de aparecer — corrija a resposta " +
+          "ou descarte." +
+          '<div style="margin-top:6px"><button type="button" class="atalho" data-descartar-gest="1">' +
+          "Descartar os dados de gestações anteriores</button></div></div></div>";
+      }
     }
-    h += campoArea("out3", "Outras observações das gestações anteriores", "317") + "</div>";
+    h += "</div>";
 
     h += '<div class="secao" style="margin-top:20px"><div class="secao__titulo">Da família</div>';
     var linhasFam = "";
@@ -1067,12 +1190,21 @@ button { font: inherit; color: inherit; }
       "</div></div>";
 
     h += '<div class="secao"><div class="secao__titulo">Hemograma e bioquímica</div><div class="campos">' +
-      campoNum("hb", "Hemoglobina", "503", 3, 20) + campoNum("plaq", "Plaquetas (mil/mm³)", "504", 5, 900) +
-      campoNum("leuc", "Leucócitos", "505", 500, 60000) + campoNum("glic", "Glicose", "507", 20, 600) +
-      campoNum("creat", "Creatinina", "515", 0.1, 15) + campoNum("tgo", "TGO", "516", 1, 2000) +
-      campoNum("totg1", "TOTG 1ª medida", "508", 20, 400) +
-      campoNum("totg2", "TOTG 2ª medida (2h)", "509", 20, 400) +
-      campoNum("tsh", "TSH", "513", 0, 100) + campoNum("t4l", "T4 livre", "514", 0, 10) +
+      // UNIDADES EXPLICITAS EM TODOS. Sem elas o mesmo numero significa coisas
+      // diferentes conforme o laboratorio, e o fullPIERS le tres destes campos:
+      // creatinina, plaquetas e TGO. Unidade errada erra o escore por ordem de
+      // grandeza. Adotado o padrao brasileiro -- confirmar com o laboratorio do
+      // MEJC (decisoes.md, pendencia 3).
+      campoNum("hb", "Hemoglobina (g/dL)", "503", 3, 20) +
+      campoNum("plaq", "Plaquetas (mil/mm³)", "504", 5, 900) +
+      campoNum("leuc", "Leucócitos (/mm³)", "505", 500, 60000) +
+      campoNum("glic", "Glicose (mg/dL)", "507", 20, 600) +
+      campoNum("creat", "Creatinina (mg/dL)", "515", 0.1, 15) +
+      campoNum("tgo", "TGO / AST (U/L)", "516", 1, 2000) +
+      campoNum("totg1", "TOTG 1ª medida (mg/dL)", "508", 20, 400) +
+      campoNum("totg2", "TOTG 2ª medida, 2 h (mg/dL)", "509", 20, 400) +
+      campoNum("tsh", "TSH (µUI/mL)", "513", 0, 100) +
+      campoNum("t4l", "T4 livre (ng/dL)", "514", 0, 10) +
       "</div>" + campoArea("obse", "Observações do hemograma", "506") + "</div>";
 
     h += '<div class="secao"><div class="secao__titulo">Sorologias</div>' +
@@ -1482,6 +1614,11 @@ button { font: inherit; color: inherit; }
 
     // atalho por grupo do exame físico
     if (t.dataset.descartar) { set(t.dataset.descartar, null); render(); return; }
+    if (t.dataset.descartarGest) {
+      ["ng", "np", "na", "ano_ult_parto", "out3"].forEach(function (k) { set(k, null); });
+      CONDICOES.forEach(function (c) { set("ant_" + c.id, null); });
+      render(); return;
+    }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
     if (t.id === "abrir") { document.getElementById("modal").style.display = "flex"; return; }
     if (t.id === "fechar") { tentarFechar(); return; }
