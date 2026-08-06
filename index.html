@@ -238,37 +238,39 @@ button { font: inherit; color: inherit; }
 /* Gramática de linha única: rótulo com largura fixa, controle sempre na mesma
    coluna x, em todos os blocos. Antes o controle caía em 3 posições diferentes
    só dentro de Antecedentes, e isso fazia a tela parecer sem estrutura. */
-/* Resultado da calculadora e, logo abaixo e menor, o cartao de confianca.
-   Um numero pontual esconde quanta incerteza carrega quando ha dado faltando --
-   ver Mathiszig-Lee 2022 (NPJ Digit Med) e White 2026 (JCO Precis Oncol). */
-.resultado {
-  border: 1px solid var(--borda-forte); border-radius: 4px;
-  padding: 14px 16px; margin-top: 16px; background: var(--branco);
+/* Resultado da calculadora e ressalvas num cartao SO. Eram duas caixas
+   empilhadas, a segunda com tres paragrafos corridos -- quem esta atendendo
+   varre, nao le. A cor da borda e do selo carrega a confianca; as ressalvas sao
+   topicos curtos. O numero pontual sozinho esconde a incerteza que ele carrega
+   quando ha dado faltando (Mathiszig-Lee 2022, NPJ Digit Med). */
+.cartao-calc {
+  border: 1px solid var(--borda-forte); border-left-width: 4px; border-radius: 4px;
+  padding: 12px 16px; margin-top: 16px; background: var(--branco);
 }
-.resultado__rot {
+.cartao-calc--bom   { border-left-color: var(--verde); }
+.cartao-calc--medio { border-left-color: var(--ambar); }
+.cartao-calc--ruim  { border-left-color: var(--vermelho); }
+.cartao-calc__topo { display: flex; align-items: center; gap: 14px; }
+.cartao-calc__rot {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--texto-fraco); font-weight: 700;
 }
-.resultado__valor {
-  font-size: 26px; font-weight: 300; color: var(--texto-forte);
-  margin: 4px 0 2px; font-variant-numeric: tabular-nums;
+.cartao-calc__valor {
+  font-size: 24px; font-weight: 300; color: var(--texto-forte);
+  margin-top: 2px; font-variant-numeric: tabular-nums;
 }
-.resultado__nota { font-size: 11.5px; color: var(--texto-fraco); margin: 0; }
-
-.confianca {
-  border-radius: 4px; padding: 10px 12px; margin-top: 8px;
-  border-left: 3px solid; font-size: 11.5px;
+.cartao-calc__nivel {
+  margin-left: auto; font-size: 12px; font-weight: 700;
+  padding: 4px 12px; border-radius: 12px; white-space: nowrap;
 }
-.confianca--bom   { background: var(--verde-fraco);    border-color: var(--verde);    color: #12705f; }
-.confianca--medio { background: var(--ambar-fraco);    border-color: var(--ambar);    color: #8a6420; }
-.confianca--ruim  { background: var(--vermelho-fraco); border-color: var(--vermelho); color: #a03428; }
-.confianca__topo { display: flex; align-items: baseline; gap: 10px; margin-bottom: 5px; }
-.confianca__rot {
-  font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; opacity: .75;
+.cartao-calc--bom   .cartao-calc__nivel { background: var(--verde-fraco);    color: #12705f; }
+.cartao-calc--medio .cartao-calc__nivel { background: var(--ambar-fraco);    color: #8a6420; }
+.cartao-calc--ruim  .cartao-calc__nivel { background: var(--vermelho-fraco); color: #a03428; }
+.cartao-calc__notas {
+  margin: 10px 0 0; padding-left: 18px;
+  font-size: 11.5px; color: var(--texto); line-height: 1.65;
 }
-.confianca__nivel { font-size: 13px; font-weight: 700; margin-left: auto; }
-.confianca__linha { margin: 0 0 5px; line-height: 1.5; }
-.confianca__linha:last-child { margin-bottom: 0; }
+.cartao-calc__notas li { margin-bottom: 2px; }
 
 .sub-eixo {
   font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
@@ -637,7 +639,6 @@ button { font: inherit; color: inherit; }
     var h = '<h2 class="painel__titulo">Calculadoras</h2>' +
       '<p class="painel__nota">Escores calculados a partir do que já foi preenchido nos outros blocos.</p>';
 
-    var relevante = get("atu_pree") === "sim";
 
     /* Imputacao da SpO2: com 405 vazio, a CALCULADORA assume 97%, conforme a nota
        da planilha. O campo 405 continua vazio -- gravar 97 nele tornaria o valor
@@ -663,15 +664,12 @@ button { font: inherit; color: inherit; }
     var faltando = estado.filter(function (x) { return !x.tem; });
     var medidos = estado.filter(function (x) { return x.tem && !x.imputado; }).length;
 
+    // Sem porteiro por 361: a medica determinou que a calculadora roda em todo
+    // caso que tenha os dados. A pressuposicao de pre-eclampsia do modelo
+    // continua registrada, mas como ressalva do cartao, nao como bloqueio.
     h += '<div class="secao"><div class="secao__titulo">fullPIERS</div>' +
-      '<p style="font-size:12px;margin:0 0 10px">Risco de desfecho materno adverso em 48 h na ' +
+      '<p style="font-size:12px;margin:0 0 10px">Risco de desfecho materno adverso na ' +
       "<b>pré-eclâmpsia</b>.</p>";
-
-    if (!relevante) {
-      h += '<div class="aviso aviso--info"><span>i</span><div>' +
-        "<b>Não se aplica a esta paciente.</b> O fullPIERS pressupõe pré-eclâmpsia — marque 361 em " +
-        "<b>Gestação atual</b>.</div></div>";
-    }
 
     var linhasPiers = "";
     estado.forEach(function (x) {
@@ -688,39 +686,36 @@ button { font: inherit; color: inherit; }
     });
     h += grupoLinhas(linhasPiers);
 
-    h += '<div class="resultado">' +
-      '<div class="resultado__rot">Probabilidade de desfecho adverso em 48 h</div>' +
-      '<div class="resultado__valor">— não calculado</div>' +
-      '<div class="resultado__nota">A equação publicada não está implementada. Motivo abaixo.</div>' +
-      "</div>";
-
-    var nivel, cor, resumo;
+    /* Resultado e confianca num cartao so, em topicos. Eram duas caixas
+       empilhadas com tres paragrafos corridos -- quem esta atendendo nao le
+       paragrafo, varre. Cada ressalva virou um topico curto, e o nivel de
+       confianca virou selo ao lado do resultado, que e onde o olho ja esta. */
+    var nivel, cor, topicos = [];
     if (faltando.length) {
       nivel = "Insuficiente";
       cor = "ruim";
-      resumo = "Faltam " + faltando.length + " de " + PIERS.length + " insumos: " +
-        esc(faltando.map(function (x) { return x.i.n; }).join(", ")) + ".";
+      topicos.push("<b>Faltam " + faltando.length + " de " + PIERS.length + ":</b> " +
+        esc(faltando.map(function (x) { return x.i.n; }).join(", ")));
     } else if (spo2Imputada) {
       nivel = "Moderada";
       cor = "medio";
-      resumo = medidos + " de " + PIERS.length + " insumos medidos. A SpO₂ foi <b>assumida em 97%</b>, " +
-        "não medida — o escore fica mais informado do que de fato é, e o erro cai na direção " +
-        "tranquilizadora.";
+      topicos.push("<b>SpO₂ assumida em 97%</b>, não medida — erro cai para o lado tranquilizador");
     } else {
       nivel = "Alta";
       cor = "bom";
-      resumo = "Todos os " + PIERS.length + " insumos medidos, nenhum assumido.";
+      topicos.push("Os " + PIERS.length + " insumos medidos, nenhum assumido");
     }
+    topicos.push("Equação publicada <b>não implementada</b> — faltam os coeficientes do artigo");
+    topicos.push("AUROC <b>0,68</b> em validação externa, contra 0,88 na derivação");
+    topicos.push("Prevê as próximas <b>48 h</b>; desempenho cai a cada dia");
+    topicos.push("Derivado em gestantes <b>internadas</b> com pré-eclâmpsia");
 
-    h += '<div class="confianca confianca--' + cor + '">' +
-      '<div class="confianca__topo"><span class="confianca__rot">Confiança do cálculo</span>' +
-      '<span class="confianca__nivel">' + esc(nivel) + "</span></div>" +
-      '<p class="confianca__linha">' + resumo + "</p>" +
-      '<p class="confianca__linha">Mesmo com os 7 insumos medidos a confiança <b>não é total</b>: ' +
-      "em validação multicêntrica o fullPIERS teve AUROC <b>0,68</b> (IC 0,63-0,74), contra 0,88 na " +
-      "coorte de derivação. E o desempenho <b>cai a cada dia</b> — o modelo prevê as próximas 48 h.</p>" +
-      '<p class="confianca__linha">Foi derivado em gestantes <b>internadas</b> com pré-eclâmpsia. ' +
-      "Uso ambulatorial, como nesta consulta, já está fora do cenário de derivação.</p>" +
+    h += '<div class="cartao-calc cartao-calc--' + cor + '">' +
+      '<div class="cartao-calc__topo">' +
+      '<div><div class="cartao-calc__rot">Probabilidade de desfecho adverso</div>' +
+      '<div class="cartao-calc__valor">— não calculado</div></div>' +
+      '<span class="cartao-calc__nivel">' + esc(nivel) + "</span></div>" +
+      '<ul class="cartao-calc__notas"><li>' + topicos.join("</li><li>") + "</li></ul>" +
       "</div>";
 
     h += "</div>";
@@ -901,6 +896,10 @@ button { font: inherit; color: inherit; }
     // Sem atalho de grupo, de proposito: fumo, alcool e drogas sao itens
     // estigmatizados e subnotificados, e um botao que varresse as tres para
     // "Nunca" transformaria subnotificacao em registro afirmativo de ausencia.
+    // Campo livre: tres estados nao cobrem quantidade, tempo de uso nem
+    // contexto, e este era o unico bloco sem lugar para escrever isso.
+    h += '<div class="campos" style="margin-top:14px">' +
+      campoArea("hab_obs", "Outras observações sobre hábitos", null) + "</div>";
     h += "</div>";
     return h;
   };
@@ -940,11 +939,14 @@ button { font: inherit; color: inherit; }
         "Altura uterina, BCF e movimentação fetal podem ainda não ser avaliáveis — " +
         "“não avaliável” é resposta gravada, diferente de deixar em branco.</div></div>";
     }
+    // As tres na MESMA linha da grade: 418 entra como campoTri e nao como
+    // linha(), para o rotulo ficar colado nas opcoes em vez de separado pela
+    // coluna fixa de 300px.
     h += '<div class="campos">' + campoNum("au", "Altura uterina (cm)", "417", 5, 50) +
-      campoNum("bcf", "FCF (bpm)", "419", 60, 220) + "</div>" +
-      grupoLinhas(linha("Movimentação fetal", "418", "movf",
+      campoNum("bcf", "FCF (bpm)", "419", 60, 220) +
+      campoTri("movf", "Movimentação fetal", "418",
         [{ v: "normal", r: "Presente" }, { v: "alterado", r: "Ausente" },
-         { v: "naval", r: "Não avaliável" }]));
+         { v: "naval", r: "Não avaliável" }], "g") + "</div>";
     h += "</div>";
 
     // Sem atalho "sem alteracoes" em nenhum grupo (D-24). Cada item se responde
@@ -1299,6 +1301,15 @@ button { font: inherit; color: inherit; }
     ops.forEach(function (o) { h += '<option' + (get(k) === o ? " selected" : "") + ">" + esc(o) + "</option>"; });
     return h + "</select></div>";
   }
+  /* Controle de estados dentro da GRADE DE CAMPOS, com o rotulo em cima e as
+     opcoes logo abaixo. Diferente de linha(), que reserva 300px fixos para o
+     rotulo e afasta o controle -- util quando as linhas se empilham, ruim
+     quando o campo precisa dividir a linha com campos de digitacao. */
+  function campoTri(k, r, c, opcoes, t) {
+    return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + " " + cod(c) + "</label>" +
+      '<div>' + tri(k, opcoes) + "</div></div>";
+  }
+
   function campoArea(k, r, c) {
     return '<div class="campo campo--full"><label>' + esc(r) + " " + cod(c) + "</label>" +
       '<textarea data-k="' + k + '">' + esc(get(k) || "") + "</textarea></div>";
@@ -1338,12 +1349,15 @@ button { font: inherit; color: inherit; }
      calculado, so aponta o que falta e leva ao campo de origem.               */
   /* O rodape so mostra um aviso quando ha calculadora aplicavel -- o checklist
      inteiro mora no bloco "Calculadoras". */
+  /* O rodape acompanha a mesma regra do bloco: a calculadora vale em todo caso
+     que tenha dados, entao o atalho aparece assim que UM insumo e preenchido --
+     nao mais so quando 361 esta em "Sim". */
   function desenhaPiers() {
     var alvo = document.getElementById("piers");
-    if (get("atu_pree") !== "sim" || blocoAtivo === "calc") { alvo.innerHTML = ""; return; }
     var faltam = PIERS.filter(function (i) {
       return i.k === "ig" ? !(calcIG() || get("ig_informada")) : !get(i.k);
     }).length;
+    if (faltam === PIERS.length || blocoAtivo === "calc") { alvo.innerHTML = ""; return; }
     alvo.innerHTML = '<span class="piers__rot">fullPIERS</span>' +
       '<button class="piers__item" data-ir-calc="1">' +
       (faltam ? "faltam " + faltam + " insumos" : "insumos completos") + " — abrir</button>";
