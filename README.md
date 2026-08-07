@@ -10,8 +10,11 @@ Pré-natal de alto risco (PNAR) do MEJC — hospital universitário UFRN/EBSERH.
 - **Nada é gravado.** O formulário roda inteiro no navegador de quem abre;
   fechar a aba apaga o preenchimento. Nenhum dado sai do aparelho.
 - **Use apenas dados fictícios.** Não preencha com dados de paciente real.
-- As calculadoras aparecem montadas, mas o **fullPIERS não calcula** — a equação
-  não está implementada, e isso é deliberado.
+- O **fullPIERS calcula** quando todos os sete insumos estão preenchidos —
+  falta de insumo não vira zero, e a probabilidade ainda está em conferência
+  manual contra as calculadoras publicadas. Trate o número como demonstração.
+- O botão **"Exportar atendimento"** gera o texto do que foi preenchido para
+  colar na folha de evolução; campo em branco não aparece no texto.
 
 ## Este arquivo não se edita aqui
 

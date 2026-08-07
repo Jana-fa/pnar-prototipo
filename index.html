@@ -441,10 +441,38 @@ button { font: inherit; color: inherit; }
       <div class="piers" id="piers"></div>
       <div class="acoes" style="margin-left:auto">
         <button class="botao botao--neutro" id="rascunho">Salvar rascunho</button>
-        <button class="botao botao--principal">Concluir atendimento</button>
+        <!-- "Exportar", nao "Concluir": enquanto o AGHU for o prontuario
+             oficial, o fim do atendimento aqui e levar o texto para la. -->
+        <button class="botao botao--principal" id="exportar">Exportar atendimento</button>
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Popup de exportacao: texto corrido do que foi preenchido, para colar na
+     folha de evolucao do sistema atual (AGHU). Texto PURO de proposito --
+     o destino e um campo de texto simples, marcacao viraria lixo ao colar. -->
+<div class="fundo-modal" id="modal-export" style="display:none;z-index:60">
+  <div class="modal" style="max-width:780px;height:auto;max-height:90vh" role="dialog" aria-modal="true" aria-label="Exportar atendimento">
+    <div class="modal__topo">
+      <div class="modal__titulo">Exportar atendimento <small>texto para colar na folha de evolução</small></div>
+      <button class="fechar" id="export-fechar-x" aria-label="Fechar">&times;</button>
+    </div>
+    <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px;overflow:auto;flex:1;min-height:0">
+      <p style="margin:0;font-size:12px;color:#5b6b7b">
+        Somente o que foi <b>preenchido</b> entra no texto — campo em branco não vira “Não”.
+        Copie e cole na evolução do sistema atual.
+      </p>
+      <textarea id="export-texto" readonly spellcheck="false"
+        style="width:100%;flex:1;min-height:46vh;resize:vertical;padding:12px;border:1px solid #c7d0d9;border-radius:3px;background:#fafbfc;color:#2a3f54;font:12.5px/1.55 ui-monospace,'SFMono-Regular',Menlo,monospace;white-space:pre-wrap"></textarea>
+    </div>
+    <div class="modal__rodape">
+      <div class="acoes" style="margin-left:auto">
+        <button class="botao botao--neutro" id="export-fechar">Fechar</button>
+        <button class="botao botao--principal" id="export-copiar">Copiar texto</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -565,6 +593,14 @@ button { font: inherit; color: inherit; }
     { id: "pcaf", nome: "Pós café", faixa: "120-150", tot: "452", alt: "453" },
     { id: "palm", nome: "Pós almoço", faixa: "70-300", tot: "454", alt: "455" },
     { id: "pjan", nome: "Pós jantar", faixa: "70-300", tot: "456", alt: "457" }
+  ];
+
+  // Compartilhada entre a tela de Condutas e a exportacao.
+  var ORIENTACOES = [
+    { id: "orid", n: "Oriento dieta e controles glicêmico e pressórico", c: "700" },
+    { id: "orim", n: "Oriento mobilograma e sinais de trabalho de parto", c: "705" },
+    { id: "oris", n: "Oriento sinais de gravidade para hipertensão", c: "706" },
+    { id: "ubs", n: "Manter acompanhamento na UBS", c: "707" }
   ];
 
   /* O preditor do fullPIERS nao e "dor no peito": e dor toracica E/OU dispneia,
@@ -688,10 +724,14 @@ button { font: inherit; color: inherit; }
                + (-2,56e-3 x Plt x SpO2)
      p = 1 / (1 + e^-logit)
 
-     CONVERSAO DE UNIDADE. O formulario coleta creatinina em mg/dL, que e o
-     padrao brasileiro; o modelo pede umol/L. O fator e 88,4. Plaquetas em
-     mil/mm3 JA equivalem a x10^9/L (1 mm3 = 1 uL, entao 10^3/uL = 10^9/L) e nao
-     sao convertidas. TGO ja esta em U/L. A tela mostra o valor convertido ao
+     CONVERSAO DE UNIDADE. A creatinina entra COM a unidade escolhida no
+     preenchimento (creat_un): laudos vem de laboratorios externos variados,
+     entao a unidade e dado, nao convencao (decisao da medica, 2026-08-07).
+     mg/dL converte por 88,4 para umol/L, que e o que o modelo pede; umol/L
+     entra direto; SEM unidade o insumo conta como AUSENTE — assumir mg/dL
+     erraria por fator de 88 para o lado que nao alarma. Plaquetas em mil/mm3
+     JA equivalem a x10^9/L (1 mm3 = 1 uL, entao 10^3/uL = 10^9/L) e nao sao
+     convertidas. TGO ja esta em U/L. A tela mostra o valor convertido ao
      lado do digitado, para a conta ser conferivel sem sair da consulta.
 
      A IG entra em SEMANAS, nao em dias -- verificado numericamente: em dias
@@ -723,29 +763,22 @@ button { font: inherit; color: inherit; }
     return { rot: "Risco baixo", cor: "bom" };
   }
 
-  /* ---- desenho dos blocos ------------------------------------------------ */
-  var telas = {};
-
-  /* Calculadoras ficam num bloco proprio, nao no rodape de toda tela: o
-     fullPIERS e um modelo de risco NA PRE-ECLAMPSIA, nao um escore geral, e
-     ocupava espaco em consultas onde nao se aplica. */
-  telas.calc = function () {
-    var h = '<h2 class="painel__titulo">Calculadoras</h2>' +
-      '<p class="painel__nota">Escores calculados a partir do que já foi preenchido nos outros blocos.</p>';
-
-
-    /* Imputacao da SpO2: com 405 vazio, a CALCULADORA assume 97%, conforme a nota
-       da planilha. O campo 405 continua vazio -- gravar 97 nele tornaria o valor
-       assumido indistinguivel de uma oximetria medida. A assuncao aparece marcada
-       na linha e rebaixa o nivel do cartao de confianca. Nenhum outro insumo tem
-       imputacao automatica. */
+  /* Leitura e conversao dos insumos do modelo, num lugar SO: a tela de
+     Calculadoras e a exportacao consomem isto -- duplicar a leitura era pedir
+     para as duas divergirem em silencio. Todas as regras de recusa moram aqui:
+     numero sem unidade nao e insumo, ausencia parcial do preditor composto nao
+     vira zero, e so a SpO2 e imputada (e marcada). */
+  function insumosPiers() {
+    /* Imputacao da SpO2: com 405 vazio, a CALCULADORA assume 97%, conforme a
+       nota da planilha. O campo 405 continua vazio -- gravar 97 nele tornaria o
+       valor assumido indistinguivel de uma oximetria medida. */
     var spo2Medida = get("spo2");
     var spo2Imputada = !spo2Medida;
     var spo2Usada = spo2Medida || "97";
 
-    /* Insumos do modelo, ja convertidos. igSem em semanas decimais; a IG
-       informada por USG ("24s 3d") tem de ser interpretada, e se nao der para
-       ler o numero o insumo conta como ausente em vez de virar zero. */
+    /* igSem em semanas decimais; a IG informada por USG ("24s 3d") tem de ser
+       interpretada, e se nao der para ler o numero o insumo conta como ausente
+       em vez de virar zero. */
     var igCalc = calcIG(), igInfTxt = get("ig_informada"), igSem = null;
     if (igInfTxt) {
       var m = String(igInfTxt).match(/(\d+)\s*s(?:em)?\D*(\d+)?/i);
@@ -754,8 +787,15 @@ button { font: inherit; color: inherit; }
       igSem = igCalc.sem + igCalc.dias / 7;
     }
 
-    var crMgdl = parseFloat(get("creat"));
-    var crUmol = isNaN(crMgdl) ? null : crMgdl * CREAT_MGDL_PARA_UMOLL;
+    // Numero sem unidade nao e insumo: crUmol so existe com os DOIS presentes.
+    var crBruto = parseFloat(get("creat"));
+    var crUnid = get("creat_un");            // "mgdl" | "umoll" | undefined
+    var crUmol = null;
+    if (!isNaN(crBruto)) {
+      if (crUnid === "mgdl") { crUmol = crBruto * CREAT_MGDL_PARA_UMOLL; }
+      else if (crUnid === "umoll") { crUmol = crBruto; }
+    }
+
     var plt = parseFloat(get("plaq"));          // mil/mm3 == x10^9/L
     var ast = parseFloat(get("tgo"));           // U/L
     var spo2Num = parseFloat(spo2Usada);
@@ -769,6 +809,41 @@ button { font: inherit; color: inherit; }
     if (dorp === "sim" || disp === "alterado") { dorDisp = 1; }
     else if (dorp === "nao" && disp === "normal") { dorDisp = 0; }
 
+    // Calcula so com TODOS os insumos do modelo presentes. Faltando um, nao ha
+    // numero -- imputar o resto seria inventar a paciente.
+    var pode = igSem !== null && dorDisp !== null && crUmol !== null &&
+               !isNaN(plt) && !isNaN(ast) && !isNaN(spo2Num);
+    return {
+      igCalc: igCalc, igInfTxt: igInfTxt, igSem: igSem,
+      crBruto: crBruto, crUnid: crUnid, crUmol: crUmol,
+      plt: plt, ast: ast,
+      spo2Imputada: spo2Imputada, spo2Usada: spo2Usada, spo2Num: spo2Num,
+      dorDisp: dorDisp, pode: pode,
+      prob: pode ? fullPiers(igSem, dorDisp, crUmol, plt, ast, spo2Num) : null
+    };
+  }
+
+  /* ---- desenho dos blocos ------------------------------------------------ */
+  var telas = {};
+
+  /* Calculadoras ficam num bloco proprio, nao no rodape de toda tela: o
+     fullPIERS e um modelo de risco NA PRE-ECLAMPSIA, nao um escore geral, e
+     ocupava espaco em consultas onde nao se aplica. */
+  telas.calc = function () {
+    var h = '<h2 class="painel__titulo">Calculadoras</h2>' +
+      '<p class="painel__nota">Escores calculados a partir do que já foi preenchido nos outros blocos.</p>';
+
+
+    /* Toda a leitura e conversao dos insumos mora em insumosPiers(), que a
+       exportacao tambem usa. A assuncao da SpO2 aparece marcada na linha e
+       rebaixa o nivel do cartao de confianca; nenhum outro insumo tem
+       imputacao automatica. */
+    var z = insumosPiers();
+    var spo2Imputada = z.spo2Imputada, spo2Usada = z.spo2Usada, spo2Num = z.spo2Num;
+    var igCalc = z.igCalc, igInfTxt = z.igInfTxt, igSem = z.igSem;
+    var crBruto = z.crBruto, crUnid = z.crUnid, crUmol = z.crUmol;
+    var plt = z.plt, ast = z.ast, dorDisp = z.dorDisp;
+
     var estado = PIERS.map(function (i) {
       if (i.k === "spo2") { return { i: i, tem: true, imputado: spo2Imputada, valor: spo2Usada + "%" }; }
       if (i.k === "ig") {
@@ -779,9 +854,17 @@ button { font: inherit; color: inherit; }
       // dor toracica e dispneia guardam o valor interno; a lista mostra o rotulo.
       var ROTULO = { nao: "Ausente", sim: "Presente", normal: "Ausente", alterado: "Presente" };
       // numericos mostram a conversao para a unidade do modelo, para conferencia
-      if (i.k === "creat" && crUmol !== null) {
-        return { i: i, tem: true, imputado: false,
-                 valor: crMgdl + " mg/dL = " + crUmol.toFixed(0) + " µmol/L" };
+      if (i.k === "creat") {
+        if (crUmol !== null) {
+          return { i: i, tem: true, imputado: false,
+                   valor: crUnid === "mgdl"
+                     ? crBruto + " mg/dL = " + crUmol.toFixed(0) + " µmol/L"
+                     : crBruto + " µmol/L" };
+        }
+        // valor digitado sem unidade: falta, mas a linha diz O QUE falta
+        if (!isNaN(crBruto)) {
+          return { i: i, tem: false, imputado: false, semUnidade: true, valor: null };
+        }
       }
       if (i.k === "plaq" && !isNaN(plt)) {
         return { i: i, tem: true, imputado: false, valor: plt + " mil/mm³ = " + plt + " ×10⁹/L" };
@@ -797,11 +880,7 @@ button { font: inherit; color: inherit; }
     var faltando = estado.filter(function (x) { return !x.tem; });
     var medidos = estado.filter(function (x) { return x.tem && !x.imputado; }).length;
 
-    // Calcula so com TODOS os insumos do modelo presentes. Faltando um, nao ha
-    // numero -- imputar o resto seria inventar a paciente.
-    var pode = igSem !== null && dorDisp !== null && crUmol !== null &&
-               !isNaN(plt) && !isNaN(ast) && !isNaN(spo2Num);
-    var prob = pode ? fullPiers(igSem, dorDisp, crUmol, plt, ast, spo2Num) : null;
+    var pode = z.pode, prob = z.prob;
 
     // Sem porteiro por 361: a medica determinou que a calculadora roda em todo
     // caso que tenha os dados. A pressuposicao de pre-eclampsia do modelo
@@ -817,6 +896,8 @@ button { font: inherit; color: inherit; }
         selo = '<span class="selo-alerta">assumida — não medida</span>';
       } else if (x.tem) {
         selo = '<span class="piers__item ok" style="cursor:default">' + esc(x.valor || "preenchido") + "</span>";
+      } else if (x.semUnidade) {
+        selo = '<span class="piers__item" style="cursor:default">sem a unidade</span>';
       } else {
         selo = '<span class="piers__item" style="cursor:default">falta</span>';
       }
@@ -834,7 +915,9 @@ button { font: inherit; color: inherit; }
       cor = "ruim";
       selo = "Sem cálculo";
       valorTxt = "—";
-      var quem = faltando.map(function (x) { return x.i.n; });
+      var quem = faltando.map(function (x) {
+        return x.semUnidade ? x.i.n + " (falta a unidade)" : x.i.n;
+      });
       if (dorDisp === null && quem.indexOf("Dor torácica") < 0 && quem.indexOf("Dispneia") < 0) {
         quem.push("dor torácica e/ou dispneia");
       }
@@ -848,8 +931,10 @@ button { font: inherit; color: inherit; }
       if (spo2Imputada) {
         topicos.push("<b>SpO₂ assumida em 97%</b>, não medida — o erro cai para o lado tranquilizador");
       }
-      if (crUmol !== null) {
+      if (crUnid === "mgdl") {
         topicos.push("Creatinina convertida de mg/dL para <b>µmol/L</b> (×88,4), que é a unidade do modelo");
+      } else if (crUnid === "umoll") {
+        topicos.push("Creatinina informada em <b>µmol/L</b>, que já é a unidade do modelo — sem conversão");
       }
     }
     topicos.push("Prevê as próximas <b>48 h</b>; o desempenho cai a cada dia");
@@ -989,7 +1074,10 @@ button { font: inherit; color: inherit; }
       // abortos) nao existe ultimo parto para datar.
       var houveParto = !isNaN(np) && np > 0;
       h += '<div class="campos" style="margin-top:10px">' +
-        campoNum("ng", "Nº de gestações", "300", 0, 20) +
+        // "anteriores" no rotulo a pedido da medica (2026-08-07): 300 conta so
+        // as gestacoes anteriores, a atual fica fora — e o que da forma ao
+        // aviso de partos + abortos logo abaixo.
+        campoNum("ng", "Nº de gestações anteriores", "300", 0, 20) +
         campoNum("np", "Nº de partos", "301", 0, 20) +
         campoNum("na", "Nº de abortos", "302", 0, 20) +
         // Grava o ANO, nao o intervalo: intervalo apurado hoje envelhece e passa
@@ -1001,7 +1089,7 @@ button { font: inherit; color: inherit; }
         "</div>";
       if (!isNaN(ng) && !isNaN(np) && !isNaN(na) && np + na > ng) {
         h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
-          "<b>Partos + abortos (" + (np + na) + ") passa do nº de gestações (" + ng + ").</b>" +
+          "<b>Partos + abortos (" + (np + na) + ") passa do nº de gestações anteriores (" + ng + ").</b>" +
           "Aviso apenas — não bloqueia o salvamento.</div></div>";
       }
       h += '<div class="secao__titulo" style="margin-top:16px">Intercorrências em gestações anteriores</div>' +
@@ -1193,19 +1281,33 @@ button { font: inherit; color: inherit; }
       // UNIDADES EXPLICITAS EM TODOS. Sem elas o mesmo numero significa coisas
       // diferentes conforme o laboratorio, e o fullPIERS le tres destes campos:
       // creatinina, plaquetas e TGO. Unidade errada erra o escore por ordem de
-      // grandeza. Adotado o padrao brasileiro -- confirmar com o laboratorio do
-      // MEJC (decisoes.md, pendencia 3).
+      // grandeza. Os laudos vem de laboratorios EXTERNOS variados, entao a
+      // creatinina -- unico dos tres com duas unidades correntes de laudo --
+      // tem a unidade ESCOLHIDA no preenchimento (creat_un), nunca assumida
+      // (decisao da medica, 2026-08-07; fecha a pendencia 3). Plaquetas em
+      // mil/mm3 == x10^9/L, mesmo numero; TGO so se reporta em U/L.
       campoNum("hb", "Hemoglobina (g/dL)", "503", 3, 20) +
       campoNum("plaq", "Plaquetas (mil/mm³)", "504", 5, 900) +
       campoNum("leuc", "Leucócitos (/mm³)", "505", 500, 60000) +
       campoNum("glic", "Glicose (mg/dL)", "507", 20, 600) +
-      campoNum("creat", "Creatinina (mg/dL)", "515", 0.1, 15) +
+      campoNum("creat", "Creatinina", "515", 0.1, 1400) +
+      campoTri("creat_un", "Unidade da creatinina", null,
+        [{ v: "mgdl", r: "mg/dL" }, { v: "umoll", r: "µmol/L" }], "p") +
       campoNum("tgo", "TGO / AST (U/L)", "516", 1, 2000) +
       campoNum("totg1", "TOTG 1ª medida (mg/dL)", "508", 20, 400) +
       campoNum("totg2", "TOTG 2ª medida, 2 h (mg/dL)", "509", 20, 400) +
       campoNum("tsh", "TSH (µUI/mL)", "513", 0, 100) +
       campoNum("t4l", "T4 livre (ng/dL)", "514", 0, 10) +
-      "</div>" + campoArea("obse", "Observações do hemograma", "506") + "</div>";
+      "</div>";
+    // Sinalizar, nunca assumir: numero sem unidade nao entra no fullPIERS, e o
+    // aviso diz isso aqui, ao lado de onde se corrige — nao so no cartao.
+    if (get("creat") && !get("creat_un")) {
+      h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
+        "<b>Creatinina sem unidade.</b> Escolha mg/dL ou µmol/L ao lado do valor — " +
+        "sem a unidade o fullPIERS trata a creatinina como não preenchida. O sistema não assume." +
+        "</div></div>";
+    }
+    h += campoArea("obse", "Observações do hemograma", "506") + "</div>";
 
     h += '<div class="secao"><div class="secao__titulo">Sorologias</div>' +
       '<table class="grade grade--larga"><tbody>';
@@ -1310,11 +1412,20 @@ button { font: inherit; color: inherit; }
     }
     h += "</tbody></table></div>";
 
+    /* O tempo pos-prandial NAO e rotulo fixo do servico: cada paciente mede no
+       tempo que mede em casa, e quem atende digita o que ela informa (decisao
+       da medica, 2026-08-07, que fechou a pendencia 2). Texto livre de
+       proposito: a resposta vem em formas variadas. */
+    h += '<div class="campos" style="margin-top:12px">' +
+      campoTexto("gl_tempo", "Tempo entre a refeição e as medidas pós-prandiais", null, "g") +
+      "</div>";
+
     /* Legenda do calculo. Diz o que o sistema FAZ e, sobretudo, o que ele NAO
        faz: ele nao classifica glicemia. A contagem de alteradas e informada por
        quem preenche, comparando cada medida com a faixa. Escrever aqui um
-       limiar de normalidade seria inventar criterio clinico -- e as faixas de
-       pos almoco e pos jantar ainda estao pendentes de confirmacao. */
+       limiar de normalidade seria inventar criterio clinico -- as quatro faixas
+       dos rotulos foram confirmadas pela medica em 2026-08-07 (pendencia 2),
+       incluindo o 70-300, que destoa das demais. */
     h += '<p style="font-size:11px;color:#93a2b1;margin:10px 0 0;line-height:1.6;max-width:1000px">' +
       "<b>Como a proporção é calculada:</b> alteradas ÷ total de medidas, por momento do dia. " +
       "A linha <b>No período</b> soma os quatro momentos e recalcula sobre o total. " +
@@ -1353,10 +1464,7 @@ button { font: inherit; color: inherit; }
 
     h += '<div class="secao"><div class="secao__titulo">Orientações</div>' +
       '<div class="linhas-cond">';
-    [{ id: "orid", n: "Oriento dieta e controles glicêmico e pressórico", c: "700" },
-     { id: "orim", n: "Oriento mobilograma e sinais de trabalho de parto", c: "705" },
-     { id: "oris", n: "Oriento sinais de gravidade para hipertensão", c: "706" },
-     { id: "ubs", n: "Manter acompanhamento na UBS", c: "707" }].forEach(function (o) {
+    ORIENTACOES.forEach(function (o) {
       var on = get("cond_" + o.id) === "sim";
       h += '<div style="display:flex;align-items:center;gap:12px;padding:5px 0;border-bottom:1px solid #f0f3f5">' +
         '<button type="button" class="atalho' + (on ? " feito" : "") + '" data-cond2="' + o.id + '" style="width:26px">' +
@@ -1498,9 +1606,9 @@ button { font: inherit; color: inherit; }
       obst: null, antec: null, habit: null, exame: null, labor: null, vacin: null, condu: null };
     var n = 0, chaves = Object.keys(dados);
     if (bloco === "exame") { n = chaves.filter(function (k) { return /^(ex_|peso|estatura|psist|pdias|spo2|au|bcf|dorp|edema|movf)/.test(k); }).length; return { n: n, t: 20 }; }
-    if (bloco === "labor") { n = chaves.filter(function (k) { return /^(soro_|hb|plaq|leuc|glic[^_]|creat|tgo|tsh|t4l|abo|rh|coombs|eas|uroc)/.test(k); }).length; return { n: n, t: 18 }; }
+    if (bloco === "labor") { n = chaves.filter(function (k) { return /^(soro_|hb|plaq|leuc|glic[^_]|creat|tgo|tsh|t4l|abo|rh|coombs|eas|uroc)/.test(k); }).length; return { n: n, t: 19 }; }
     if (bloco === "calc") { return { n: 0, t: 0 }; }
-    if (bloco === "glice") { n = chaves.filter(function (k) { return /^gl_/.test(k); }).length; return { n: n, t: 8 }; }
+    if (bloco === "glice") { n = chaves.filter(function (k) { return /^gl_/.test(k); }).length; return { n: n, t: 9 }; }
     if (bloco === "vacin") { n = chaves.filter(function (k) { return /^vac_/.test(k); }).length; return { n: n, t: 6 }; }
     if (bloco === "antec") { n = chaves.filter(function (k) { return /^(pes_|fam_|ist_|ulcg|ant_|ng|np|na)/.test(k); }).length; return { n: n, t: 36 }; }
     if (bloco === "habit") { n = chaves.filter(function (k) { return /^hab_/.test(k); }).length; return { n: n, t: 3 }; }
@@ -1532,7 +1640,10 @@ button { font: inherit; color: inherit; }
   function desenhaPiers() {
     var alvo = document.getElementById("piers");
     var faltam = PIERS.filter(function (i) {
-      return i.k === "ig" ? !(calcIG() || get("ig_informada")) : !get(i.k);
+      if (i.k === "ig") { return !(calcIG() || get("ig_informada")); }
+      // creatinina sem unidade e insumo ausente tambem no rodape
+      if (i.k === "creat") { return !get("creat") || !get("creat_un"); }
+      return !get(i.k);
     }).length;
     if (faltam === PIERS.length || blocoAtivo === "calc") { alvo.innerHTML = ""; return; }
     alvo.innerHTML = '<span class="piers__rot">fullPIERS</span>' +
@@ -1591,6 +1702,308 @@ button { font: inherit; color: inherit; }
     }
   }
 
+  /* ====================================================================== *
+     EXPORTAR ATENDIMENTO — texto corrido para colar na folha de evolucao do
+     sistema atual (AGHU), enquanto ele continuar sendo o prontuario oficial.
+
+     Regras (D-26):
+     - So entra o que foi PREENCHIDO. Campo em branco nao vira "Nao" nem
+       "normal": e a regra dos tres estados (D-06) valendo tambem no papel.
+     - Achado de exame Normal reproduz o texto do achado normal ("presente e
+       simetrico") -- e dica de tela, mas e o que se escreve no laudo.
+     - Valor assumido viaja marcado (D-08): SpO2 imputada sai como "assumida
+       em 97%, nao medida" tambem no texto.
+     - Texto PURO, sem marcacao de markdown: o destino e um campo de texto
+       simples, e asteriscos virariam lixo ao colar.
+   * ====================================================================== */
+  var EXP_SIMNAO = { sim: "Sim", nao: "Não", nsabe: "Não sabe" };
+
+  function montarExportacao() {
+    var blocos = [];
+
+    // Numero em texto de laudo usa virgula decimal; o dado gravado segue com ponto.
+    function virg(v) { return String(v).replace(".", ","); }
+    function bloco(titulo, linhas) {
+      var tem = linhas.filter(function (l) { return l; }).map(function (l) {
+        return /[.!?]$/.test(l) ? l : l + ".";
+      });
+      if (tem.length) { blocos.push(titulo.toUpperCase() + "\n" + tem.join("\n")); }
+    }
+    // Uma "secao" vira UMA linha de texto corrido: "Rotulo: a; b; c."
+    function secao(rotulo, itens) {
+      var tem = itens.filter(function (i) { return i; });
+      if (!tem.length) { return ""; }
+      return (rotulo ? rotulo + ": " : "") + tem.join("; ") + ".";
+    }
+    function item(rotulo, chave, mapa) {
+      var v = get(chave);
+      if (!v) { return ""; }
+      return rotulo + ": " + (mapa ? (mapa[v] || v) : v);
+    }
+    function itemDet(rotulo, chave, chaveDet, mapa) {
+      var s = item(rotulo, chave, mapa);
+      var det = get(chaveDet);
+      if (s && det) { s += " (" + det + ")"; }
+      else if (!s && det) { s = rotulo + " (texto sem resposta marcada): " + det; }
+      return s;
+    }
+    function condicoesExp(prefixo) {
+      return CONDICOES.map(function (c) {
+        return item(c.nome, prefixo + c.id, EXP_SIMNAO);
+      });
+    }
+
+    bloco("Identificação", [secao(null, [
+      item("Naturalidade", "cida"), item("Zona de residência", "zonr"),
+      item("Telefone", "tele"), item("Estado civil", "estc"),
+      item("Escolaridade", "esco"), item("Encaminhamento", "enca")])]);
+
+    var gestAnt = [item("Já teve gestação anterior", "gest_ant", EXP_SIMNAO),
+      item("Nº de gestações anteriores", "ng"), item("Nº de partos", "np"),
+      item("Nº de abortos", "na")];
+    if (get("ano_ult_parto")) {
+      var interv = intervaloPartos();
+      gestAnt.push("Ano do último parto: " + get("ano_ult_parto") +
+        (interv === null ? "" : " (intervalo de " + interv + " anos)"));
+    }
+    bloco("Antecedentes", [
+      secao("Dela", PESSOAIS.map(function (c) {
+        return itemDet(c.nome, "pes_" + c.id, "det_" + c.id, EXP_SIMNAO);
+      })),
+      secao("IST", [
+        item("Herpes genital", "ist_herg", EXP_SIMNAO),
+        item("Verruga genital", "ist_verg", EXP_SIMNAO),
+        item("Úlcera genital", "ulcg", EXP_SIMNAO),
+        itemDet("Outra IST diagnosticada", "ist_mae", "ist_outras", EXP_SIMNAO)]),
+      item("Outras observações sobre ela", "outr"),
+      secao("Gestações anteriores", gestAnt),
+      secao("Intercorrências em gestações anteriores", condicoesExp("ant_")),
+      item("Outras observações das gestações anteriores", "out3"),
+      secao("Da família", FAMILIARES.map(function (c) {
+        return item(c.nome, "fam_" + c.id, EXP_SIMNAO);
+      })),
+      item("Outras observações familiares", "out2")]);
+
+    bloco("Hábitos", [
+      secao(null, HABITOS.map(function (b) {
+        var s = item(b.nome, "hab_" + b.id, { nunca: "Nunca", parou: "Parou", atual: "Uso atual" });
+        if (b.id === "drog" && s && get("droq")) { s += " (" + get("droq") + ")"; }
+        return s;
+      })),
+      item("Outras observações sobre hábitos", "hab_obs")]);
+
+    var gesta = [];
+    if (get("dum")) {
+      gesta.push("DUM: " + fmtData(get("dum")));
+      var dpp = calcDPP();
+      if (dpp) { gesta.push("DPP (por DUM): " + fmtData(dpp)); }
+    }
+    var igInf = get("ig_informada"), igC = calcIG();
+    if (igInf) { gesta.push("IG: " + igInf + " (informada)"); }
+    else if (igC) { gesta.push("IG: " + igC.sem + "s " + igC.dias + "d (por DUM)"); }
+    gesta.push(item("Gestação múltipla", "gest_multipla", EXP_SIMNAO));
+    bloco("Gestação atual", [
+      secao(null, gesta),
+      secao("Intercorrências nesta gestação", condicoesExp("atu_")),
+      item("Outros", "out4"),
+      item("Queixas atuais", "quea"),
+      itemDet("Medicamentos em uso", "medu", "medq", EXP_SIMNAO)]);
+
+    var medidas = [get("peso") ? "Peso: " + virg(get("peso")) + " kg" : "",
+      get("estatura") ? "Estatura: " + virg(get("estatura")) + " cm" : ""];
+    var pesoN = parseFloat(get("peso")), altN = parseFloat(get("estatura"));
+    if (pesoN && altN) {
+      medidas.push("IMC (calculado): " + (pesoN / Math.pow(altN / 100, 2)).toFixed(1).replace(".", ","));
+    }
+    if (get("psist") && get("pdias")) { medidas.push("PA: " + get("psist") + "/" + get("pdias") + " mmHg"); }
+    else {
+      if (get("psist")) { medidas.push("PA sistólica: " + get("psist") + " mmHg"); }
+      if (get("pdias")) { medidas.push("PA diastólica: " + get("pdias") + " mmHg"); }
+    }
+    // So a SpO2 MEDIDA sai aqui; a assumida so existe dentro do fullPIERS, marcada.
+    if (get("spo2")) { medidas.push("SpO₂: " + virg(get("spo2")) + "%"); }
+    var exame = [secao("Medidas", medidas),
+      secao("Obstétrico", [
+        get("au") ? "Altura uterina: " + virg(get("au")) + " cm" : "",
+        get("bcf") ? "FCF: " + virg(get("bcf")) + " bpm" : "",
+        item("Movimentação fetal", "movf", { normal: "Presente", alterado: "Ausente", naval: "Não avaliável" })])];
+    EXAME.forEach(function (grp) {
+      // "Mamas: Mamas: ..." nao: grupo de item unico homonimo dispensa o prefixo.
+      var prefixo = (grp.itens.length === 1 && grp.itens[0].nome === grp.g) ? null : grp.g;
+      exame.push(secao(prefixo, grp.itens.map(function (i) {
+        var v = get("ex_" + i.id);
+        if (!v) { return ""; }
+        if (v === "normal") { return i.nome + ": " + (i.normal ? "normal (" + i.normal + ")" : "normal"); }
+        var s = i.nome + ": ALTERADO";
+        if (i.det && get("exdet_" + i.id)) { s += " (" + get("exdet_" + i.id) + ")"; }
+        return s;
+      })));
+    });
+    exame.push(secao("Membros inferiores", [
+      item("Sem edema, panturrilhas livres", "ex_mmii", { normal: "normal", alterado: "ALTERADO" })]));
+    exame.push(secao("Sinais de gravidade", [
+      item("Dor torácica", "dorp", { nao: "Ausente", sim: "PRESENTE" }),
+      item("Dispneia", "ex_eupne", { normal: "Ausente", alterado: "PRESENTE" })]));
+    exame.push(item("Outras observações do exame", "exobs"));
+    bloco("Exame físico", exame);
+
+    var creatExp = "";
+    if (get("creat")) {
+      var un = get("creat_un");
+      // Sinalizar, nunca esconder: numero sem unidade sai marcado como tal.
+      creatExp = "Creatinina: " + virg(get("creat")) + (un === "mgdl" ? " mg/dL"
+        : un === "umoll" ? " µmol/L" : " (unidade não informada)");
+    }
+    bloco("Exames e sorologias", [
+      secao("Tipagem sanguínea", [
+        item("Grupo ABO", "abo", { a: "A", b: "B", ab: "AB", o: "O", nsabe: "Não realizada" }),
+        item("Fator Rh", "rh", { neg: "Negativo", pos: "Positivo", nsabe: "Não realizado" }),
+        item("Coombs indireto", "coombs", { nao: "Negativo", sim: "Positivo", nsabe: "Sem resultado" })]),
+      secao("Hemograma e bioquímica", [
+        get("hb") ? "Hemoglobina: " + virg(get("hb")) + " g/dL" : "",
+        get("plaq") ? "Plaquetas: " + virg(get("plaq")) + " mil/mm³" : "",
+        get("leuc") ? "Leucócitos: " + virg(get("leuc")) + "/mm³" : "",
+        get("glic") ? "Glicose: " + virg(get("glic")) + " mg/dL" : "",
+        creatExp,
+        get("tgo") ? "TGO/AST: " + virg(get("tgo")) + " U/L" : "",
+        get("totg1") ? "TOTG 1ª medida: " + virg(get("totg1")) + " mg/dL" : "",
+        get("totg2") ? "TOTG 2ª medida (2 h): " + virg(get("totg2")) + " mg/dL" : "",
+        get("tsh") ? "TSH: " + virg(get("tsh")) + " µUI/mL" : "",
+        get("t4l") ? "T4 livre: " + virg(get("t4l")) + " ng/dL" : ""]),
+      item("Observações do hemograma", "obse"),
+      secao("Sorologias", SOROLOGIAS.map(function (s) {
+        var v = get("soro_" + s.id);
+        if (!v) { return ""; }
+        var txt = s.nome + ": " + v;
+        if (s.det && get("sorodet_" + s.id)) { txt += " (titulação " + get("sorodet_" + s.id) + ")"; }
+        return txt;
+      })),
+      secao("Urina", [
+        item("EAS", "eas", { normal: "normal", alterado: "ALTERADO" }),
+        itemDet("Urocultura", "uroc", "uroq", { normal: "normal", alterado: "ALTERADO" })])]);
+
+    var glice = [], somaT = 0, somaA = 0, temSoma = false;
+    GLICEMIA.forEach(function (g) {
+      var t = get("gl_" + g.id + "_t"), a = get("gl_" + g.id + "_a");
+      if (!t && !a) { return; }
+      var s = g.nome + " (" + g.faixa + "): ";
+      var tN = parseInt(t, 10), aN = parseInt(a, 10);
+      if (!isNaN(tN) && !isNaN(aN) && aN > tN) {
+        s += tN + " medidas, " + aN + " alteradas (ALTERADAS > TOTAL — conferir)";
+      } else if (!isNaN(tN) && !isNaN(aN)) {
+        s += tN + " medidas, " + aN + " alteradas";
+        if (tN > 0) {
+          s += " (" + Math.round(aN / tN * 100) + "%)";
+          somaT += tN; somaA += aN; temSoma = true;
+        }
+      } else if (!isNaN(tN)) { s += tN + " medidas, alteradas não informadas"; }
+      else { s += aN + " alteradas, total não informado"; }
+      glice.push(s);
+    });
+    if (temSoma && glice.length > 1) {
+      glice.push("No período: " + somaT + " medidas, " + somaA + " alteradas (" +
+        Math.round(somaA / somaT * 100) + "%)");
+    }
+    bloco("Controle glicêmico", [secao(null, glice),
+      item("Tempo entre a refeição e as medidas pós-prandiais", "gl_tempo")]);
+
+    bloco("Vacinas", [
+      secao(null, VACINAS.map(function (v) {
+        var st = get("vac_" + v.id);
+        if (!st) { return ""; }
+        var s = v.nome + ": " + st;
+        if (st === "Vacinada" && get("vacd_" + v.id)) { s += " em " + fmtData(get("vacd_" + v.id)); }
+        return s;
+      })),
+      item("Outras vacinas", "out5")]);
+
+    // fullPIERS: so entra se ao menos um insumo foi tocado — e, calculado, leva
+    // junto as marcas obrigatorias (SpO2 assumida, conversao da creatinina).
+    var z = insumosPiers();
+    var algumInsumo = z.igSem !== null || get("dorp") || get("ex_eupne") ||
+      get("spo2") || get("plaq") || get("creat") || get("tgo");
+    if (algumInsumo) {
+      if (z.pode) {
+        var pct = (z.prob * 100).toFixed(z.prob < 0.1 ? 1 : 0).replace(".", ",");
+        var notas = [];
+        if (z.spo2Imputada) { notas.push("SpO₂ assumida em 97%, não medida"); }
+        if (z.crUnid === "mgdl") {
+          notas.push("creatinina convertida de mg/dL para µmol/L (×88,4)");
+        }
+        bloco("Calculadoras", [
+          "fullPIERS: " + pct + "% de probabilidade de desfecho materno adverso em 48 h (" +
+          faixaPiers(z.prob).rot.toLowerCase() + ")" +
+          (notas.length ? " — " + notas.join("; ") : "")]);
+      } else {
+        var falta = [];
+        if (z.igSem === null) { falta.push("idade gestacional"); }
+        if (z.dorDisp === null) { falta.push("dor torácica e/ou dispneia"); }
+        if (z.crUmol === null) {
+          falta.push(isNaN(z.crBruto) ? "creatinina" : "unidade da creatinina");
+        }
+        if (isNaN(z.plt)) { falta.push("plaquetas"); }
+        if (isNaN(z.ast)) { falta.push("TGO"); }
+        bloco("Calculadoras", ["fullPIERS: sem cálculo — falta " + falta.join(", ") + "."]);
+      }
+    }
+
+    bloco("Condutas", [
+      secao("Orientações", ORIENTACOES.map(function (o) {
+        return get("cond_" + o.id) === "sim" ? o.n : "";
+      })),
+      item("Conduta e plano", "plan"),
+      itemDet("Solicito rotina de exames", "solr", "solq", EXP_SIMNAO),
+      (function () {
+        var sem = parseInt(get("retorno"), 10);
+        if (!sem) { return ""; }
+        var d = new Date(); d.setDate(d.getDate() + sem * 7);
+        return "Retorno em " + sem + " semana(s) (≈ " + fmtData(d.toISOString().slice(0, 10)) + ")";
+      })(),
+      get("ageu") ? "Ultrassom agendado para " + fmtData(get("ageu")) : "",
+      item("Ultrassonografia obstétrica", "ulto"),
+      item("Morfológica de 1º trimestre", "ultm"),
+      item("Morfológica de 2º trimestre", "ult2"),
+      item("Outras observações", "outo")]);
+
+    var agora = new Date();
+    function dois(n) { return (n < 10 ? "0" : "") + n; }
+    var carimbo = dois(agora.getDate()) + "/" + dois(agora.getMonth() + 1) + "/" +
+      agora.getFullYear() + " " + dois(agora.getHours()) + ":" + dois(agora.getMinutes());
+
+    var cab = "1ª CONSULTA MÉDICA — PNAR (PRÉ-NATAL DE ALTO RISCO)\n" +
+      "Paciente: Maria de Souza · 31 anos\n";
+    var corpo = blocos.length ? blocos.join("\n\n")
+      : "Nenhum campo preenchido até agora.";
+    var rodape = "\n\nExportado do AGMEJC (protótipo) em " + carimbo + " · " +
+      Object.keys(dados).length + " campo(s) preenchido(s). Campo não citado = não preenchido.";
+    return cab + "\n" + corpo + rodape;
+  }
+
+  function abrirExportacao() {
+    document.getElementById("export-texto").value = montarExportacao();
+    document.getElementById("modal-export").style.display = "flex";
+  }
+
+  function copiarExportacao(botao) {
+    var area = document.getElementById("export-texto");
+    function feito() {
+      botao.textContent = "Copiado ✓";
+      setTimeout(function () { botao.textContent = "Copiar texto"; }, 2000);
+    }
+    function reserva() {
+      area.focus(); area.select();
+      try {
+        document.execCommand("copy");
+        feito();
+      } catch (e) {
+        alert("Não foi possível copiar automaticamente. Selecione o texto e use Ctrl+C.");
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(area.value).then(feito, reserva);
+    } else { reserva(); }
+  }
+
   /* ---- eventos ----------------------------------------------------------- */
   document.addEventListener("click", function (ev) {
     var t = ev.target.closest("button");
@@ -1622,6 +2035,11 @@ button { font: inherit; color: inherit; }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
     if (t.id === "abrir") { document.getElementById("modal").style.display = "flex"; return; }
     if (t.id === "fechar") { tentarFechar(); return; }
+    if (t.id === "exportar") { abrirExportacao(); return; }
+    if (t.id === "export-fechar" || t.id === "export-fechar-x") {
+      document.getElementById("modal-export").style.display = "none"; return;
+    }
+    if (t.id === "export-copiar") { copiarExportacao(t); return; }
     if (t.id === "rascunho") {
       var n = Object.keys(dados).length;
       alert("Rascunho salvo com " + n + " campo(s) preenchido(s).");
@@ -1698,7 +2116,9 @@ button { font: inherit; color: inherit; }
     var el = ev.target;
     if (el.hasAttribute && el.hasAttribute("data-num")) { filtraNumero(el); }
     // campos que mudam o que a tela mostra (derivados, avisos, blocos condicionais)
-    var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2", "ano_ult_parto"];
+    // "creat" entra por causa do aviso de unidade: digitar valor sem unidade
+    // escolhida mostra o alerta na hora, nao so na proxima troca de bloco.
+    var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2", "ano_ult_parto", "creat"];
     if (el.dataset.k) {
       set(el.dataset.k, el.value);
       // NAO redesenha em "input" de campo de data. O navegador PROIBE ler
@@ -1728,7 +2148,18 @@ button { font: inherit; color: inherit; }
   }
 
   document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") { tentarFechar(); }
+    if (ev.key === "Escape") {
+      // O popup de exportacao fecha primeiro -- e sem confirmacao, porque o
+      // texto e regeneravel; os DADOS continuam no formulario atras dele.
+      var exp = document.getElementById("modal-export");
+      if (exp.style.display !== "none") { exp.style.display = "none"; return; }
+      tentarFechar();
+    }
+  });
+
+  // Clique no fundo tambem fecha so o popup de exportacao (nada se perde).
+  document.getElementById("modal-export").addEventListener("click", function (ev) {
+    if (ev.target === this) { this.style.display = "none"; }
   });
 
   render();
