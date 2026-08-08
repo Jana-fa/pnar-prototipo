@@ -155,6 +155,17 @@ button { font: inherit; color: inherit; }
 .campo textarea { resize: vertical; min-height: 54px; }
 .campo__dica { font-size: 10.5px; color: var(--texto-fraco); }
 .campo--derivado input { background: var(--verde-fraco); border-style: dashed; }
+/* datacao: campo + botao "ajustar" na mesma linha (D-27).
+   As larguras precisam vencer o `width: 100%` da regra geral de .campo input
+   -- sem isso cada caixa toma a linha inteira e semanas/dias empilham. */
+.datacao__par { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.campo .datacao__par input[type="date"] { flex: 1 1 auto; min-width: 0; width: auto; }
+.datacao__par .atalho { flex: none; white-space: nowrap; }
+.campo .datacao__par .ig-num { width: 42px; flex: 0 0 42px; text-align: center; padding: 6px 4px; }
+.ig-un { font-size: 11px; color: var(--texto-fraco); flex: none; }
+/* readonly nao e "desabilitado": o valor se le e se copia, so nao se digita
+   sem passar pelo botao. O cursor conta essa historia. */
+.datacao__par input[readonly] { cursor: default; }
 .selo-derivado {
   font-size: 9.5px; background: var(--verde-fraco); color: var(--verde-esc);
   border: 1px solid #b9e8dc; border-radius: 2px; padding: 1px 5px; font-weight: 700;
@@ -675,24 +686,102 @@ button { font: inherit; color: inherit; }
   var SIM_NAO_SABE = [{ v: "nao", r: "Não" }, { v: "sim", r: "Sim" }, { v: "nsabe", r: "Não sabe" }];
   var NORMAL_ALT = [{ v: "normal", r: "Normal" }, { v: "alterado", r: "Alterado" }];
 
-  /* ---- idade gestacional derivada da DUM -------------------------------- */
-  function calcIG() {
-    var dum = get("dum");
-    if (!dum) { return null; }
-    var d = new Date(dum + "T00:00:00");
-    if (isNaN(d)) { return null; }
-    var dias = Math.floor((Date.now() - d.getTime()) / 86400000);
-    if (dias < 0 || dias > 320) { return null; }
-    return { sem: Math.floor(dias / 7), dias: dias % 7, total: dias };
+  /* ---- datacao: DPP e IG derivam da DUM ate alguem AJUSTAR (D-27) --------
+     Os tres campos ficam na mesma linha, como sempre. DPP e IG nascem
+     derivadas e READONLY, com selo dizendo de onde vieram; o botao "ajustar"
+     e o unico caminho para digitar por cima, e "voltar ao cálculo" desfaz.
+     Assim "presumida" e "informada" nao disputam o mesmo campo: o estado do
+     campo diz qual das duas esta na tela, e trocar de estado exige um gesto.
+
+     UM ajuste por vez: ajustar a IG faz a DPP derivar dela, e vice-versa --
+     dois ajustes simultaneos poderiam se contradizer.
+
+     O que fica gravado do ajuste NAO e o texto "30s 2d", e sim o DIA ZERO
+     (datacao_ancora_data). Guardar a IG crua congelaria a paciente na idade
+     do dia em que foi digitada e faria a DPP escorregar um dia por dia --
+     defeito medido no desenho anterior. Com o dia zero, a IG envelhece
+     sozinha e a DPP fica fixa, que e o comportamento clinico correto.
+
+     A DUM tem protecao extra: e relato da paciente, e o calculo NUNCA escreve
+     nela -- a DUM equivalente aparece como dica fora do campo (mesmo
+     principio da SpO2 imputada, D-08). A referencia temporal e "hoje"
+     enquanto nao existe data_consulta (pendencia 16). */
+  var DIA_MS = 86400000;
+  var SEM_MAX = 45;
+  function isoDe(d) { return d.toISOString().slice(0, 10); }
+  // meio-dia local evita que toISOString() troque o dia em qualquer fuso
+  function lerDataISO(iso) {
+    if (!iso) { return null; }
+    var d = new Date(iso + "T12:00:00");
+    return isNaN(d) ? null : d;
   }
-  function calcDPP() {
-    var dum = get("dum");
-    if (!dum) { return null; }
-    var d = new Date(dum + "T00:00:00");
-    if (isNaN(d)) { return null; }
-    d.setDate(d.getDate() + 280);           // regra de Naegele
-    return d.toISOString().slice(0, 10);
+  function hojeMeioDia() {
+    var a = new Date();
+    return new Date(a.getFullYear(), a.getMonth(), a.getDate(), 12);
   }
+  /* Semanas e dias sao campos SEPARADOS e independentes (352 e 353). Semanas
+     em branco = nada digitado. DIAS em branco NAO e zero: fica NULO no
+     registro, como a nota do 353 sempre exigiu -- o calculo usa 0 e a tela
+     diz que usou, em vez de fingir que a pessoa respondeu "0". */
+  function igDigitada() {
+    var s = get("ig_sem");
+    if (s === undefined || s === "") { return null; }
+    var sem = parseInt(s, 10);
+    if (isNaN(sem) || sem > SEM_MAX) { return null; }
+    var bruto = get("ig_dias");
+    var ausente = (bruto === undefined || bruto === "");
+    var dias = ausente ? 0 : parseInt(bruto, 10);
+    if (isNaN(dias) || dias > 6) { return null; }
+    return { sem: sem, dias: dias, total: sem * 7 + dias, diasAusente: ausente };
+  }
+  function ig(total) {
+    return { sem: Math.floor(total / 7), dias: total % 7, total: total };
+  }
+  function fmtIG(o) { return o ? o.sem + "s " + o.dias + "d" : null; }
+  /* Dia zero do ajuste, gravado no momento em que a pessoa digita. E o que
+     torna o ajuste estavel no tempo. */
+  function ancorarPorIG() {
+    var d = igDigitada();
+    set("datacao_ancora_data",
+        d ? isoDe(new Date(hojeMeioDia().getTime() - d.total * DIA_MS)) : null);
+  }
+  function ancorarPorDPP() {
+    var d = lerDataISO(get("dpp_informada"));
+    set("datacao_ancora_data",
+        d ? isoDe(new Date(d.getTime() - 280 * DIA_MS)) : null);
+  }
+  function datacao() {
+    var hoje = hojeMeioDia();
+    var dumD = lerDataISO(get("dum"));
+    var ajuste = get("datacao_ajuste") || "";        // "" | "ig" | "dpp"
+    var ancD = lerDataISO(get("datacao_ancora_data"));
+    var r = { ajuste: ajuste, temDum: !!dumD, temAjuste: !!(ajuste && ancD) };
+
+    // a datacao por DUM continua calculavel mesmo com ajuste ativo: e ela que
+    // aparece na dica, para a alternativa nunca se perder de vista
+    if (dumD) {
+      var gd = Math.round((hoje - dumD) / DIA_MS);
+      if (gd >= 0 && gd <= 320) {
+        r.porDum = { ig: ig(gd), dpp: isoDe(new Date(dumD.getTime() + 280 * DIA_MS)) };
+      } else { r.dumImplausivel = true; }
+    }
+
+    var vig = r.temAjuste ? ancD : dumD;
+    r.origem = r.temAjuste ? ajuste : (dumD ? "dum" : null);
+    if (!vig) { return r; }
+    var g = Math.round((hoje - vig) / DIA_MS);
+    if (g < 0 || g > 320) { r.implausivel = true; return r; }
+    r.ig = ig(g);
+    r.dpp = isoDe(new Date(vig.getTime() + 280 * DIA_MS));   // regra de Naegele
+    r.dumEq = isoDe(vig);
+    // de quanto o ajuste afasta a datacao do que a DUM diria
+    if (r.porDum && r.temAjuste) { r.difDias = g - r.porDum.ig.total; }
+    return r;
+  }
+  /* leitura VIGENTE para quem consome a datacao (topo, rodape, fullPIERS,
+     exportacao): o ajuste quando existe, a DUM quando nao. */
+  function calcIG() { return datacao().ig || null; }
+  function calcDPP() { return datacao().dpp || null; }
   function fmtData(iso) {
     if (!iso) { return "—"; }
     var p = iso.split("-");
@@ -776,16 +865,11 @@ button { font: inherit; color: inherit; }
     var spo2Imputada = !spo2Medida;
     var spo2Usada = spo2Medida || "97";
 
-    /* igSem em semanas decimais; a IG informada por USG ("24s 3d") tem de ser
-       interpretada, e se nao der para ler o numero o insumo conta como ausente
-       em vez de virar zero. */
-    var igCalc = calcIG(), igInfTxt = get("ig_informada"), igSem = null;
-    if (igInfTxt) {
-      var m = String(igInfTxt).match(/(\d+)\s*s(?:em)?\D*(\d+)?/i);
-      if (m) { igSem = parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 7 : 0); }
-    } else if (igCalc) {
-      igSem = igCalc.sem + igCalc.dias / 7;
-    }
+    /* igSem em semanas decimais, pela datacao VIGENTE (D-27): a ancora pode
+       ser a DUM, a IG informada ou a DPP. IG digitada que nao se interpreta
+       conta como insumo ausente em vez de virar zero -- e nao cai para a DUM,
+       porque a correcao existe, so nao foi lida. */
+    var igVig = calcIG(), igSem = igVig ? igVig.sem + igVig.dias / 7 : null;
 
     // Numero sem unidade nao e insumo: crUmol so existe com os DOIS presentes.
     var crBruto = parseFloat(get("creat"));
@@ -814,7 +898,7 @@ button { font: inherit; color: inherit; }
     var pode = igSem !== null && dorDisp !== null && crUmol !== null &&
                !isNaN(plt) && !isNaN(ast) && !isNaN(spo2Num);
     return {
-      igCalc: igCalc, igInfTxt: igInfTxt, igSem: igSem,
+      igVig: igVig, igSem: igSem,
       crBruto: crBruto, crUnid: crUnid, crUmol: crUmol,
       plt: plt, ast: ast,
       spo2Imputada: spo2Imputada, spo2Usada: spo2Usada, spo2Num: spo2Num,
@@ -840,14 +924,16 @@ button { font: inherit; color: inherit; }
        imputacao automatica. */
     var z = insumosPiers();
     var spo2Imputada = z.spo2Imputada, spo2Usada = z.spo2Usada, spo2Num = z.spo2Num;
-    var igCalc = z.igCalc, igInfTxt = z.igInfTxt, igSem = z.igSem;
+    var igVig = z.igVig, igSem = z.igSem;
     var crBruto = z.crBruto, crUnid = z.crUnid, crUmol = z.crUmol;
     var plt = z.plt, ast = z.ast, dorDisp = z.dorDisp;
 
     var estado = PIERS.map(function (i) {
       if (i.k === "spo2") { return { i: i, tem: true, imputado: spo2Imputada, valor: spo2Usada + "%" }; }
       if (i.k === "ig") {
-        var v = igInfTxt || (igCalc ? igCalc.sem + "s " + igCalc.dias + "d" : null);
+        // vigente pela ancora (D-27); IG digitada ilegivel aparece como texto,
+        // mas conta como faltando -- igSem null nunca vira zero
+        var v = fmtIG(igVig);
         return { i: i, tem: igSem !== null, imputado: false, valor: v };
       }
       var g = get(i.k);
@@ -971,26 +1057,45 @@ button { font: inherit; color: inherit; }
       "</div>";
   };
 
+  /* DPP e IG nascem derivadas e readonly; o botao "ajustar" abre a digitacao
+     (D-27). A tela desenha a ESTRUTURA; valores, selos e dicas entram em
+     seguida por atualizarDatacao() -- fonte unica, para o desenho e a
+     atualizacao em lugar nao poderem divergir. */
   telas.gesta = function () {
-    var ig = calcIG(), dpp = calcDPP();
-    var igInf = get("ig_informada");
+    var d = datacao();
+    var ajIG = d.ajuste === "ig", ajDPP = d.ajuste === "dpp";
     var h = '<h2 class="painel__titulo">Gestação atual</h2>' +
       '<p class="painel__nota">Data provável do parto e idade gestacional são calculadas a partir da DUM. ' +
-      "Corrigir a IG por ultrassonografia é registrado como informada.</p>" +
-      '<div class="campos">' +
-      campoData("dum", "Data da última menstruação", "350", "m");
+      'Use <b>ajustar</b> para corrigir por ultrassonografia — o valor corrigido fica marcado como informado, ' +
+      "e o cálculo pela DUM continua visível.</p>" +
+      '<div class="campos">';
 
-    h += '<div class="campo campo--m campo--derivado"><label>Data provável do parto ' + cod("351") +
-      ' <span class="selo-derivado">por DUM</span></label>' +
-      '<input data-derivado="dpp" value="' + (dpp ? fmtData(dpp) : "") +
-      '" readonly placeholder="informe a DUM">' +
-      '<span class="campo__dica">regra de Naegele: DUM + 280 dias</span></div>';
+    h += '<div class="campo campo--m" id="campo-dum"><label>Data da última menstruação ' + cod("350") + "</label>" +
+      '<input type="date" data-k="dum" value="' + esc(get("dum") || "") + '">' +
+      '<span class="campo__dica" id="dica-dum"></span></div>';
 
-    h += '<div class="campo campo--m' + (igInf ? "" : " campo--derivado") + '"><label>Idade gestacional ' + cod("352/353") +
-      (igInf ? ' <span class="selo-alerta">informada</span>' : ' <span class="selo-derivado">por DUM</span>') + "</label>" +
-      '<input id="ig-campo" value="' + (igInf ? igInf : (ig ? ig.sem + "s " + ig.dias + "d" : "")) +
-      '" placeholder="' + (ig ? ig.sem + "s " + ig.dias + "d" : "ex.: 24s 3d") + '">' +
-      '<span class="campo__dica">' + (igInf && ig ? "difere do cálculo pela DUM" : "editável — corrija se houver USG") + "</span></div>";
+    h += '<div class="campo campo--m" id="campo-dpp"><label>Data provável do parto ' + cod("351") +
+      ' <span id="selo-dpp"></span></label><div class="datacao__par">' +
+      '<input type="date" id="dpp-campo" data-k="dpp_informada"' + (ajDPP ? "" : " readonly") +
+      ' value="' + esc(ajDPP ? (get("dpp_informada") || "") : "") + '">' +
+      '<button type="button" class="atalho" data-datacao="' + (ajDPP ? "voltar" : "ajustar") + '" data-alvo="dpp">' +
+      (ajDPP ? "voltar ao cálculo" : "ajustar") + "</button></div>" +
+      '<span class="campo__dica" id="dica-dpp"></span></div>';
+
+    /* Semanas e dias em caixas separadas, sempre -- readonly quando derivadas,
+       digitaveis depois de "ajustar". A forma nao muda entre os dois estados:
+       so a borda, o selo e o botao. */
+    h += '<div class="campo campo--m" id="campo-ig"><label>Idade gestacional ' + cod("352/353") +
+      ' <span id="selo-ig"></span></label><div class="datacao__par">' +
+      '<input class="ig-num" id="ig-sem" data-igp="sem" inputmode="numeric" maxlength="2"' +
+      (ajIG ? "" : " readonly") + ' value="' + esc(ajIG ? (get("ig_sem") || "") : "") + '">' +
+      '<span class="ig-un">sem</span>' +
+      '<input class="ig-num" id="ig-dias" data-igp="dias" inputmode="numeric" maxlength="1"' +
+      (ajIG ? "" : " readonly") + ' value="' + esc(ajIG ? (get("ig_dias") || "") : "") + '">' +
+      '<span class="ig-un">dias</span>' +
+      '<button type="button" class="atalho" data-datacao="' + (ajIG ? "voltar" : "ajustar") + '" data-alvo="ig">' +
+      (ajIG ? "voltar ao cálculo" : "ajustar") + "</button></div>" +
+      '<span class="campo__dica" id="dica-ig"></span></div>';
 
     h += "</div>";
 
@@ -1640,7 +1745,8 @@ button { font: inherit; color: inherit; }
   function desenhaPiers() {
     var alvo = document.getElementById("piers");
     var faltam = PIERS.filter(function (i) {
-      if (i.k === "ig") { return !(calcIG() || get("ig_informada")); }
+      // IG digitada que nao se interpreta conta como FALTANDO, igual ao calculo
+      if (i.k === "ig") { return !calcIG(); }
       // creatinina sem unidade e insumo ausente tambem no rodape
       if (i.k === "creat") { return !get("creat") || !get("creat_un"); }
       return !get(i.k);
@@ -1690,8 +1796,8 @@ button { font: inherit; color: inherit; }
     ajustarRotulos();
     desenhaTrilho();
     desenhaPiers();
-    var ig = calcIG();
-    document.getElementById("topo-ig").textContent = get("ig_informada") || (ig ? ig.sem + "s " + ig.dias + "d" : "—");
+    // derivados, selos e dicas da datacao -- e a IG do topo (D-27)
+    atualizarDatacao();
 
     if (foco) {
       var novo = painel.querySelector('[data-k="' + foco + '"], [data-gl="' + foco + '"]');
@@ -1792,15 +1898,22 @@ button { font: inherit; color: inherit; }
       })),
       item("Outras observações sobre hábitos", "hab_obs")]);
 
-    var gesta = [];
-    if (get("dum")) {
-      gesta.push("DUM: " + fmtData(get("dum")));
-      var dpp = calcDPP();
-      if (dpp) { gesta.push("DPP (por DUM): " + fmtData(dpp)); }
+    /* A datacao sai com a mesma procedencia da tela (D-27): cada valor diz se
+       foi informado ou de onde derivou, e o ajuste leva junto o que a DUM
+       diria -- no papel a alternativa tambem nao se perde. DUM calculada so
+       aparece MARCADA como nao informada (D-08). */
+    var gesta = [], dt = datacao();
+    var marca = dt.temAjuste ? " (informada)" : " (" + (ROTULO_ORIGEM[dt.origem] || "") + ")";
+    if (get("dum")) { gesta.push("DUM: " + fmtData(get("dum"))); }
+    else if (dt.dumEq) {
+      gesta.push("DUM compatível: ≈ " + fmtData(dt.dumEq) + " (calculada — não informada)");
     }
-    var igInf = get("ig_informada"), igC = calcIG();
-    if (igInf) { gesta.push("IG: " + igInf + " (informada)"); }
-    else if (igC) { gesta.push("IG: " + igC.sem + "s " + igC.dias + "d (por DUM)"); }
+    if (dt.dpp) { gesta.push("DPP: " + fmtData(dt.dpp) + marca); }
+    if (dt.ig) { gesta.push("IG: " + fmtIG(dt.ig) + marca); }
+    if (dt.temAjuste && dt.porDum) {
+      gesta.push("pela DUM seria IG " + fmtIG(dt.porDum.ig) + " · DPP " + fmtData(dt.porDum.dpp) +
+        (dt.difDias ? " — " + Math.abs(dt.difDias) + " d de diferença" : ""));
+    }
     gesta.push(item("Gestação múltipla", "gest_multipla", EXP_SIMNAO));
     bloco("Gestação atual", [
       secao(null, gesta),
@@ -2034,6 +2147,40 @@ button { font: inherit; color: inherit; }
     }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
     if (t.id === "abrir") { document.getElementById("modal").style.display = "flex"; return; }
+    /* "ajustar" abre a digitacao de DPP ou IG; "voltar ao cálculo" desfaz e
+       devolve o campo a derivacao pela DUM. Um ajuste por vez: abrir um fecha
+       o outro, porque dois ajustes simultaneos poderiam se contradizer.
+       O campo abre JA PREENCHIDO com o valor calculado -- corrigir dois dias
+       nao deveria custar redigitar tudo -- e o selo passa a "informada" na
+       hora, dizendo que aquele numero agora esta sob controle manual. */
+    if (t.dataset.datacao) {
+      var alvo = t.dataset.alvo;
+      if (t.dataset.datacao === "ajustar") {
+        var d = datacao();
+        if (alvo === "ig") {
+          set("ig_sem", d.ig ? String(d.ig.sem) : "");
+          set("ig_dias", d.ig ? String(d.ig.dias) : "");
+          set("dpp_informada", null);
+          set("datacao_ajuste", "ig");
+          ancorarPorIG();
+        } else {
+          set("dpp_informada", d.dpp || "");
+          set("ig_sem", null); set("ig_dias", null);
+          set("datacao_ajuste", "dpp");
+          ancorarPorDPP();
+        }
+      } else {
+        // desfazer e explicito e apaga so o ajuste; a DUM nao e tocada
+        set("datacao_ajuste", null);
+        set("datacao_ancora_data", null);
+        set("ig_sem", null); set("ig_dias", null);
+        set("dpp_informada", null);
+      }
+      render();
+      var foco = document.getElementById(alvo === "ig" ? "ig-sem" : "dpp-campo");
+      if (foco && !foco.readOnly) { foco.focus(); try { foco.select(); } catch (e) { /* date */ } }
+      return;
+    }
     if (t.id === "fechar") { tentarFechar(); return; }
     if (t.id === "exportar") { abrirExportacao(); return; }
     if (t.id === "export-fechar" || t.id === "export-fechar-x") {
@@ -2068,19 +2215,101 @@ button { font: inherit; color: inherit; }
     try { el.setSelectionRange(novo, novo); } catch (e) { /* sem selecao */ }
   }
 
-  /* Campo de data redesenha aqui, nao em "input": "change" so dispara com a
-     data completa, entao o foco nunca e roubado no meio da digitacao. */
-  /* Atualiza so o que DERIVA da DUM, sem trocar o HTML do painel. Existe para
-     que o campo de data possa dar retorno imediato sem ser recriado embaixo do
-     dedo de quem digita. */
-  function atualizarDerivados() {
-    var ig = calcIG(), dpp = calcDPP(), igInf = get("ig_informada");
+  /* Atualiza a datacao SEM trocar o HTML do painel: valores derivados, selos
+     e dicas dos tres campos, mais a IG do topo. Existe para que digitar num
+     campo de datacao de retorno imediato nos outros dois sem o campo ativo
+     ser recriado embaixo do dedo de quem digita. Regras:
+     - campo EM AJUSTE nunca tem o value reescrito (e o que a pessoa digitou);
+     - campo com FOCO nunca tem o value reescrito;
+     - selo diz o que esta na tela: derivado (por DUM / por IG / por DPP) ou
+       informado; a dica carrega a regra, o que falta, ou o cálculo pela DUM
+       que o ajuste deixou de lado -- a alternativa nunca some. */
+  var ROTULO_ORIGEM = { dum: "por DUM", ig: "por IG", dpp: "por DPP" };
+  function atualizarDatacao() {
+    var d = datacao();
     var topo = document.getElementById("topo-ig");
-    if (topo) { topo.textContent = igInf || (ig ? ig.sem + "s " + ig.dias + "d" : "—"); }
-    var alvoDpp = painel.querySelector('[data-derivado="dpp"]');
-    if (alvoDpp) { alvoDpp.value = dpp ? fmtData(dpp) : ""; }
-    var alvoIg = document.getElementById("ig-campo");
-    if (alvoIg && !igInf) { alvoIg.value = ig ? ig.sem + "s " + ig.dias + "d" : ""; }
+    if (topo) { topo.textContent = fmtIG(d.ig) || "—"; }
+
+    function selo(id, texto, alerta) {
+      var el = document.getElementById(id);
+      if (!el) { return; }
+      el.textContent = texto || "";
+      el.className = texto ? (alerta ? "selo-alerta" : "selo-derivado") : "";
+    }
+    function dica(id, texto) {
+      var el = document.getElementById(id);
+      if (el) { el.textContent = texto || ""; }
+    }
+    function marcarDerivado(idCampo, derivado) {
+      var el = document.getElementById(idCampo);
+      if (el) { el.classList.toggle("campo--derivado", !!derivado); }
+    }
+    function escrever(el, v) {
+      if (el && document.activeElement !== el) { el.value = v; }
+    }
+    // texto do calculo pela DUM, para o ajuste nunca apagar a alternativa
+    function pelaDum(qual) {
+      if (!d.porDum) { return ""; }
+      var v = qual === "dpp" ? fmtData(d.porDum.dpp) : fmtIG(d.porDum.ig);
+      var dif = d.difDias ? " — " + Math.abs(d.difDias) + " d de diferença" : "";
+      return "pela DUM: " + v + dif;
+    }
+
+    // DUM: campo de anamnese. O calculo nunca escreve nela; quando a datacao
+    // vem de um ajuste e a DUM esta vazia, a equivalente aparece so como dica.
+    if (d.temDum) {
+      dica("dica-dum", d.dumImplausivel ? "data fora do plausível (0 a 45 semanas)" : "relato da paciente");
+    } else {
+      dica("dica-dum", d.dumEq
+        ? "compatível com DUM ≈ " + fmtData(d.dumEq) + " (calculada — não gravada)"
+        : "relato da paciente");
+    }
+
+    /* Os campos exibem SEMPRE o valor derivado da datacao vigente -- inclusive
+       durante um ajuste, onde ele coincide com o que foi digitado no dia em
+       que se digitou. E o que faz a IG envelhecer sozinha quando o formulario
+       e reaberto depois: o ajuste guarda o dia zero, nao a idade. O que
+       distingue ajustado de derivado e o selo, a borda e o botao -- nunca o
+       valor. Ajuste aberto e ainda sem numero valido mostra campo vazio, em
+       vez de reexibir o calculo pela DUM que a pessoa esta corrigindo. */
+    var abertoVazio = { dpp: d.ajuste === "dpp" && !d.temAjuste,
+                        ig: d.ajuste === "ig" && !d.temAjuste };
+
+    var elDpp = document.getElementById("dpp-campo");
+    if (elDpp) {
+      escrever(elDpp, abertoVazio.dpp ? "" : (d.dpp || ""));
+      if (d.ajuste === "dpp") {
+        selo("selo-dpp", "informada", true);
+        marcarDerivado("campo-dpp", false);
+        dica("dica-dpp", d.temAjuste ? (pelaDum("dpp") || "corrigida por ultrassonografia")
+             : "informe a data corrigida");
+      } else {
+        selo("selo-dpp", d.dpp ? ROTULO_ORIGEM[d.origem] : "", false);
+        marcarDerivado("campo-dpp", !!d.dpp);
+        dica("dica-dpp", d.origem === "dum" ? "regra de Naegele: DUM + 280 dias"
+             : d.dpp ? pelaDum("dpp") : "informe a DUM ou ajuste");
+      }
+    }
+
+    // IG: semanas e dias em caixas separadas, sempre
+    var elSem = document.getElementById("ig-sem"), elDias = document.getElementById("ig-dias");
+    if (elSem) {
+      escrever(elSem, abertoVazio.ig || !d.ig ? "" : String(d.ig.sem));
+      escrever(elDias, abertoVazio.ig || !d.ig ? "" : String(d.ig.dias));
+      if (d.ajuste === "ig") {
+        var dig = igDigitada();
+        selo("selo-ig", "informada", true);
+        marcarDerivado("campo-ig", false);
+        dica("dica-ig", !dig ? (get("ig_sem") ? "valor fora do plausível (até 45s, 0 a 6 d)" : "informe as semanas")
+             : dig.diasAusente ? "dias não informado — o cálculo usa 0, e nada é gravado no campo"
+             : (pelaDum("ig") || "corrigida por ultrassonografia"));
+      } else {
+        selo("selo-ig", d.ig ? ROTULO_ORIGEM[d.origem] : "", false);
+        marcarDerivado("campo-ig", !!d.ig);
+        dica("dica-ig", d.origem === "dum" ? "calculada a partir da DUM"
+             : d.ig ? pelaDum("ig") : "informe a DUM ou ajuste");
+      }
+    }
   }
 
   /* CAMPO DE DATA: nunca redesenhar enquanto ele tem o foco.
@@ -2094,7 +2323,8 @@ button { font: inherit; color: inherit; }
     var el = ev.target;
     if (el.dataset && el.dataset.k && el.type === "date") {
       set(el.dataset.k, el.value);
-      atualizarDerivados();
+      if (el.dataset.k === "dpp_informada") { ancorarPorDPP(); }
+      atualizarDatacao();
     }
   });
 
@@ -2106,9 +2336,13 @@ button { font: inherit; color: inherit; }
      blur nao borbulha: precisa de captura. */
   document.addEventListener("blur", function (ev) {
     var el = ev.target;
+    // DPP e IG derivadas trazem o value do calculo; grava-lo no blur as
+    // transformaria em "informada" sem ninguem ter digitado. So input/change
+    // gravam, porque so disparam em acao real de quem preenche.
+    if (el.id === "dpp-campo" || el.dataset.igp) { atualizarDatacao(); return; }
     if (el.dataset && el.dataset.k && el.type === "date") {
       set(el.dataset.k, el.value);
-      atualizarDerivados();
+      atualizarDatacao();
     }
   }, true);
 
@@ -2121,6 +2355,10 @@ button { font: inherit; color: inherit; }
     var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2", "ano_ult_parto", "creat"];
     if (el.dataset.k) {
       set(el.dataset.k, el.value);
+      // datacao: os outros campos reagem no lugar, sem render() -- que
+      // roubaria o foco (ver abaixo)
+      if (el.dataset.k === "dum") { atualizarDatacao(); return; }
+      if (el.dataset.k === "dpp_informada") { ancorarPorDPP(); atualizarDatacao(); return; }
       // NAO redesenha em "input" de campo de data. O navegador PROIBE ler
       // selectionStart em type="date", entao o render() nao tem posicao para
       // restaurar: ele foca o campo e o cursor volta para o PRIMEIRO segmento.
@@ -2133,7 +2371,15 @@ button { font: inherit; color: inherit; }
     if (el.dataset.gl) { set("gl_" + el.dataset.gl, el.value); render(); return; }
     if (el.dataset.vacdata) { set("vacd_" + el.dataset.vacdata, el.value); return; }
     if (el.hasAttribute("data-ret-livre")) { set("retorno", el.value); return; }
-    if (el.id === "ig-campo") { set("ig_informada", el.value); return; }
+    /* IG: semanas e dias sao campos independentes. Cada tecla reancora, para
+       a DPP acompanhar na hora sem redesenhar o campo sob o dedo. */
+    if (el.dataset.igp) {
+      el.value = el.value.replace(/[^0-9]/g, "");
+      set(el.dataset.igp === "sem" ? "ig_sem" : "ig_dias", el.value);
+      ancorarPorIG();
+      atualizarDatacao();
+      return;
+    }
   });
 
   /* Fechar por ESC ou por clique no fundo apagaria ate 157 campos digitados.

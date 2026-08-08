@@ -15,6 +15,10 @@ Pré-natal de alto risco (PNAR) do MEJC — hospital universitário UFRN/EBSERH.
   manual contra as calculadoras publicadas. Trate o número como demonstração.
 - O botão **"Exportar atendimento"** gera o texto do que foi preenchido para
   colar na folha de evolução; campo em branco não aparece no texto.
+- Em **Gestação atual**, a DPP e a idade gestacional são calculadas a partir da
+  DUM e ficam travadas. Para corrigir por ultrassonografia, use **ajustar** —
+  o valor passa a ser marcado como *informada*, e o cálculo pela DUM continua
+  visível logo abaixo. **Voltar ao cálculo** desfaz.
 
 ## Este arquivo não se edita aqui
 
