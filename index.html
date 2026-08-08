@@ -192,6 +192,20 @@ button { font: inherit; color: inherit; }
    semanticas abaixo sobrescrevem quando ha polaridade clinica; onde nao ha, o
    azul neutro marca a escolha sem sugerir que ela e boa ou ruim. */
 .tri button.on { background: var(--azul); color: #fff; font-weight: 600; }
+
+/* Unidade colada ao valor: dois chips arredondados, na MESMA linha do numero.
+   Como campo separado na grade, a unidade caia na linha de baixo e ficava longe
+   do numero que qualifica. Chips soltos (nao segmentados) para nao parecerem um
+   controle de estado clinico -- aqui a escolha e de unidade de laudo. */
+.campo--unidade .campo__linha { display: flex; align-items: center; gap: 6px; }
+.campo--unidade .campo__linha input { flex: 1 1 62px; min-width: 0; max-width: 76px; }
+.tri--chips { border: 0; border-radius: 0; overflow: visible; gap: 4px; flex: none; }
+.tri--chips button {
+  border: 1px solid var(--borda-forte); border-radius: 999px;
+  padding: 3px 9px; font-size: 10.5px; line-height: 1.4;
+}
+.tri--chips button:last-child { border-right: 1px solid var(--borda-forte); }
+.tri--chips button.on { border-color: var(--azul); }
 .tri button.on[data-v="nao"], .tri button.on[data-v="normal"] { background: var(--verde); }
 .tri button.on[data-v="sim"], .tri button.on[data-v="alterado"] { background: var(--vermelho); }
 .tri button.on[data-v="nsabe"], .tri button.on[data-v="naval"] { background: #9aa8b5; }
@@ -673,9 +687,9 @@ button { font: inherit; color: inherit; }
   }
 
   /* ---- controle de 3 estados -------------------------------------------- */
-  function tri(chave, opcoes) {
+  function tri(chave, opcoes, variante) {
     var atual = get(chave);
-    var h = '<span class="tri" data-tri="' + chave + '">';
+    var h = '<span class="tri' + (variante ? " " + variante : "") + '" data-tri="' + chave + '">';
     opcoes.forEach(function (o) {
       h += '<button type="button" data-v="' + o.v + '"' + (atual === o.v ? ' class="on"' : "") +
            ' aria-pressed="' + (atual === o.v) + '">' + esc(o.r) + "</button>";
@@ -1395,9 +1409,8 @@ button { font: inherit; color: inherit; }
       campoNum("plaq", "Plaquetas (mil/mm³)", "504", 5, 900) +
       campoNum("leuc", "Leucócitos (/mm³)", "505", 500, 60000) +
       campoNum("glic", "Glicose (mg/dL)", "507", 20, 600) +
-      campoNum("creat", "Creatinina", "515", 0.1, 1400) +
-      campoTri("creat_un", "Unidade da creatinina", null,
-        [{ v: "mgdl", r: "mg/dL" }, { v: "umoll", r: "µmol/L" }], "p") +
+      campoNumUnidade("creat", "Creatinina", "515", 0.1, 1400, "creat_un",
+        [{ v: "mgdl", r: "mg/dL" }, { v: "umoll", r: "µmol/L" }]) +
       campoNum("tgo", "TGO / AST (U/L)", "516", 1, 2000) +
       campoNum("totg1", "TOTG 1ª medida (mg/dL)", "508", 20, 400) +
       campoNum("totg2", "TOTG 2ª medida, 2 h (mg/dL)", "509", 20, 400) +
@@ -1681,6 +1694,21 @@ button { font: inherit; color: inherit; }
       '<input type="text" inputmode="decimal" data-num data-min="' + min + '" data-max="' + max +
       '" data-k="' + k + '" value="' + esc(get(k) || "") + '">' +
       (dica ? '<span class="campo__dica">' + esc(dica) + "</span>" : "") + "</div>";
+  }
+  /* Numero com a unidade COLADA nele, na mesma linha. A unidade e dado do
+     laudo, nao convencao do sistema (D-19) -- mas como campo separado na grade
+     ela caia na linha de baixo, longe do numero que qualifica, e a medica pediu
+     os dois juntos. Reusa o mecanismo de tri() (data-tri no pai, data-v nos
+     botoes), entao o clique e o terceiro estado continuam valendo: clicar na
+     unidade ja marcada a desmarca, e sem unidade o insumo conta como ausente. */
+  function campoNumUnidade(k, r, c, min, max, chaveUn, opcoes) {
+    return '<div class="campo campo--m campo--unidade"><label>' + esc(r) + " " + cod(c) + "</label>" +
+      '<div class="campo__linha">' +
+      '<input type="text" inputmode="decimal" data-num data-min="' + min + '" data-max="' + max +
+      '" data-k="' + k + '" value="' + esc(get(k) || "") + '">' +
+      tri(chaveUn, opcoes, "tri--chips") + "</div>" +
+      '<span class="campo__dica">' +
+      (get(chaveUn) ? "unidade do laudo" : "escolha a unidade do laudo") + "</span></div>";
   }
   function campoData(k, r, c, t) {
     return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + " " + cod(c) + "</label>" +
