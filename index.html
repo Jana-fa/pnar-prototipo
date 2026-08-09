@@ -545,9 +545,9 @@ button { font: inherit; color: inherit; }
      proposito -- cobre lupus e fecha a lacuna da SAF, que so existia como
      intercorrencia de gestacao (313/363) e nunca como diagnostico dela. */
   var PESSOAIS = [
-    { id: "aler", nome: "Alergias", cod: "200", det: "201" },
-    { id: "canc", nome: "Câncer", cod: "202", det: "203" },
-    { id: "ciru", nome: "Cirurgias", cod: "204", det: "205" },
+    { id: "aler", nome: "Alergias", cod: "200", det: "201", detRot: "Quais alergias?" },
+    { id: "canc", nome: "Câncer", cod: "202", det: "203", detRot: "Qual tipo de câncer?" },
+    { id: "ciru", nome: "Cirurgias", cod: "204", det: "205", detRot: "Quais cirurgias?" },
     { id: "diab", nome: "Diabetes", cod: "206", par: "família" },
     { id: "epil", nome: "Epilepsia", cod: "207" },
     { id: "hipe", nome: "Hipertensão crônica", cod: "208", par: "família" },
@@ -557,7 +557,7 @@ button { font: inherit; color: inherit; }
     // nova). Nas demais linhas det carrega o proprio codigo, que serve de porta
     // e de rotulo ao mesmo tempo.
     { id: "autoimune", nome: "Doença autoimune", cod: null, det: true,
-      dica: "lúpus, SAF, outra" },
+      detRot: "Qual doença autoimune?", dica: "lúpus, SAF, outra" },
     { id: "tran", nome: "Transfusão", cod: "210" },
     { id: "tube", nome: "Tuberculose", cod: "211", par: "família" }
   ];
@@ -598,8 +598,26 @@ button { font: inherit; color: inherit; }
       { id: "ritm", nome: "Ritmo cardíaco", cod: "412", normal: "regular, 2 tempos" },
       { id: "buln", nome: "Bulhas", cod: "413", normal: "normofonéticas" },
       { id: "sopr", nome: "Sopros", cod: "414", normal: "ausentes" } ] },
-    { g: "Mamas", itens: [ { id: "mams", nome: "Mamas", cod: "415", normal: "sem alterações", det: "416" } ] },
-    { g: "Exame especular", itens: [ { id: "espe", nome: "Exame especular", cod: "420", normal: "colo epitelizado, fluxo fisiológico" } ] }
+    { g: "Mamas", itens: [ { id: "mams", nome: "Mamas", cod: "415", normal: "sem alterações",
+      det: "416", detRot: "Quais alterações nas mamas?" } ] },
+    // 420 nao tinha "quais" -- Alterado ficava mudo sobre o que foi visto.
+    // exdet_espe e variavel NOVA, no mesmo molde do 416 das mamas.
+    { g: "Exame especular", itens: [ { id: "espe", nome: "Exame especular", cod: "420",
+      normal: "colo epitelizado, fluxo fisiológico", det: true,
+      detRot: "O que foi encontrado no exame especular?" } ] },
+    /* 421 perguntava DUAS coisas com UM controle: edema (que importa na
+       pre-eclampsia) e panturrilha livre (pesquisa de trombose). Virou dois
+       itens, cada um com o proprio Alterado e o proprio "o que foi observado"
+       -- decisao da medica, 2026-08-09, resolve a pendencia 13. O grau do
+       edema (0 a 4+) SEGUE de fora: ela pediu a separacao, nao a escala, e o
+       texto livre do "quais alteracoes" ja aceita registrar o grau por
+       enquanto. Ambos ficam sem codigo de planilha -- nenhum dos dois SOZINHO
+       era o que 421 perguntava. */
+    { g: "Membros inferiores", itens: [
+      { id: "edema", nome: "Edema", cod: null, normal: "ausente",
+        det: true, detRot: "Localização e grau do edema" },
+      { id: "pantu", nome: "Panturrilhas", cod: null, normal: "livres, sem dor à palpação",
+        det: true, detRot: "O que foi observado (dor, empastamento, assimetria)?" } ] }
   ];
 
   var SOROLOGIAS = [
@@ -657,17 +675,22 @@ button { font: inherit; color: inherit; }
     "Médio incompleto", "Médio completo", "Superior incompleto", "Superior completo",
     "Pós-graduação", "Não informado"];
 
-  /* Ordem da anamnese real: quem ela e -> o que ela faz -> esta gestacao ->
-     o que aconteceu e acontece -> exame -> exames -> conduta.
+  /* Ordem da anamnese real: quem ela e -> o que ela faz -> exame -> exames ->
+     esta gestacao -> conduta. "Gestação atual" foi deslocada para logo ANTES
+     de "Condutas" (pedido da medica, 2026-08-09): a IG e as intercorrencias
+     desta gestacao sao o que da forma ao plano -- retorno em N semanas,
+     orientacoes -- entao ficam lidas imediatamente antes de decidi-las, nao
+     isoladas cedo na consulta, longe de onde a informacao e usada.
      Antecedentes vinha DEPOIS de intercorrencias, o que fazia os dois parecerem
      o mesmo assunto. Agora antecedentes vem antes, e nao ha coluna de familia
      dentro da grade obstetrica. */
   var BLOCOS = [
     { id: "ident", nome: "Identificação" }, { id: "antec", nome: "Antecedentes" },
-    { id: "habit", nome: "Hábitos" }, { id: "gesta", nome: "Gestação atual" },
+    { id: "habit", nome: "Hábitos" },
     { id: "exame", nome: "Exame físico" },
     { id: "labor", nome: "Exames e sorologias" }, { id: "glice", nome: "Controle glicêmico" },
     { id: "vacin", nome: "Vacinas" },
+    { id: "gesta", nome: "Gestação atual" },
     { id: "condu", nome: "Condutas" }, { id: "calc", nome: "Calculadoras" }
   ];
 
@@ -1116,20 +1139,25 @@ button { font: inherit; color: inherit; }
     var h = '<h2 class="painel__titulo">Antecedentes</h2>' +
       '<p class="painel__nota">O que ela já tinha antes desta gestação, e o que corre na família.</p>';
 
-    // Os condicionais "quais" quebram a grade de 2 colunas se ficarem soltos
-    // entre as linhas: acumula as linhas e emite o condicional fora do grupo.
+    // Cada linha e o proprio "quais" (quando existe) viajam juntos num wrapper:
+    // e ELE que vira item da grade, nao mais a linha sozinha. Um grid item que
+    // cresce de altura quando abre o condicional -- em vez de acumular todos os
+    // condicionais soltos no fim, que era o que deixava "Quais alergias?" a
+    // onze linhas de distancia de "Alergias". CSS Grid absorve a altura
+    // desigual sem quebrar as 2 colunas (ver .linhas-cond).
     h += '<div class="secao"><div class="secao__titulo">Dela</div>';
-    var linhasPes = "", depoisPes = "";
+    var linhasPes = "";
     PESSOAIS.forEach(function (c) {
       var rot = esc(c.nome) + (c.dica
         ? '<small style="display:block;color:#93a2b1;font-size:10.5px">' + esc(c.dica) + "</small>" : "");
-      linhasPes += linha(rot, c.cod, "pes_" + c.id, SIM_NAO);
+      var item = linha(rot, c.cod, "pes_" + c.id, SIM_NAO);
       if (c.det) {
-        depoisPes += condicional("pes_" + c.id, "sim", "det_" + c.id,
-          campoTexto("det_" + c.id, "Quais", c.det === true ? null : c.det, "g"), "Não");
+        item += condicional("pes_" + c.id, "sim", "det_" + c.id,
+          campoTexto("det_" + c.id, c.detRot || "Quais", c.det === true ? null : c.det, "g"), "Não");
       }
+      linhasPes += '<div class="linha-cond-grupo">' + item + "</div>";
     });
-    h += grupoLinhas(linhasPes) + depoisPes;
+    h += grupoLinhas(linhasPes);
     h += "</div>";
 
     // IST: concreto primeiro, 212 por ultimo como "outra IST" -- se a pergunta
@@ -1142,7 +1170,7 @@ button { font: inherit; color: inherit; }
         linha("Úlcera genital", "215", "ulcg", SIM_NAO) +
         linha("Outra IST diagnosticada?", "212", "ist_mae", SIM_NAO)) +
       condicional("ist_mae", "sim", "ist_outras",
-        campoTexto("ist_outras", "Quais", "213", "g"), "Não");
+        campoTexto("ist_outras", "Qual IST?", "213", "g"), "Não");
     if ((get("ist_herg") === "sim" || get("ist_verg") === "sim") && get("ist_mae") === "nao") {
       h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
         "<b>Herpes e verruga genital são IST, e “Outra IST” está em Não.</b> " +
@@ -1310,25 +1338,21 @@ button { font: inherit; color: inherit; }
     // escolher entre eles a cada secao -- carga mental sem ganho.
     EXAME.forEach(function (grp) {
       h += '<div class="secao"><div class="secao__titulo">' + esc(grp.g) + "</div>";
-      var linhasGrp = "", depoisGrp = "";
+      // Mesmo wrapper de Antecedentes: linha + seu proprio "quais" (se existir)
+      // formam UM item de grade, para o textfield abrir logo abaixo do chip.
+      var linhasGrp = "";
       grp.itens.forEach(function (i) {
-        linhasGrp += linha(esc(i.nome) + (i.normal ? '<small style="display:block;color:#93a2b1;font-size:10.5px">normal: ' +
+        var item = linha(esc(i.nome) + (i.normal ? '<small style="display:block;color:#93a2b1;font-size:10.5px">normal: ' +
           esc(i.normal) + "</small>" : ""), i.cod, "ex_" + i.id, NORMAL_ALT);
         if (i.det) {
-          depoisGrp += condicional("ex_" + i.id, "alterado", "exdet_" + i.id,
-            campoTexto("exdet_" + i.id, "Quais alterações", i.det, "g"), "Normal");
+          item += condicional("ex_" + i.id, "alterado", "exdet_" + i.id,
+            campoTexto("exdet_" + i.id, i.detRot || "Quais alterações", i.det === true ? null : i.det, "g"), "Normal");
         }
+        linhasGrp += '<div class="linha-cond-grupo">' + item + "</div>";
       });
-      h += grupoLinhas(linhasGrp) + depoisGrp;
+      h += grupoLinhas(linhasGrp);
       h += "</div>";
     });
-
-    // 421 na planilha e UM campo sim/nao que empacota duas perguntas distintas
-    // (edema, que tem graus e importa na pre-eclampsia; e panturrilha livre, que
-    // e pesquisa de trombose). Fica como esta -- separar seriam duas variaveis
-    // novas, e continua pendente de decisao da medica.
-    h += '<div class="secao"><div class="secao__titulo">Membros inferiores</div>' +
-      grupoLinhas(linha("Sem edema, panturrilhas livres", "421", "ex_mmii", NORMAL_ALT)) + "</div>";
 
     // sinais de gravidade, separado do resto: 422 e o unico item do exame em que
     // "presente" e achado ruim, e alimenta o fullPIERS junto com 403.
@@ -1705,7 +1729,7 @@ button { font: inherit; color: inherit; }
     var pref = { ident: ["cida", "zonr", "tele", "estc", "esco"], gesta: ["dum"],
       obst: null, antec: null, habit: null, exame: null, labor: null, vacin: null, condu: null };
     var n = 0, chaves = Object.keys(dados);
-    if (bloco === "exame") { n = chaves.filter(function (k) { return /^(ex_|peso|estatura|psist|pdias|spo2|au|bcf|dorp|edema|movf)/.test(k); }).length; return { n: n, t: 20 }; }
+    if (bloco === "exame") { n = chaves.filter(function (k) { return /^(ex_|peso|estatura|psist|pdias|spo2|au|bcf|dorp|movf)/.test(k); }).length; return { n: n, t: 20 }; }
     if (bloco === "labor") { n = chaves.filter(function (k) { return /^(soro_|hb|plaq|leuc|glic[^_]|creat|tgo|tsh|t4l|abo|rh|coombs|eas|uroc)/.test(k); }).length; return { n: n, t: 19 }; }
     if (bloco === "calc") { return { n: 0, t: 0 }; }
     if (bloco === "glice") { n = chaves.filter(function (k) { return /^gl_/.test(k); }).length; return { n: n, t: 9 }; }
@@ -1945,8 +1969,6 @@ button { font: inherit; color: inherit; }
         return s;
       })));
     });
-    exame.push(secao("Membros inferiores", [
-      item("Sem edema, panturrilhas livres", "ex_mmii", { normal: "normal", alterado: "ALTERADO" })]));
     exame.push(secao("Sinais de gravidade", [
       item("Dor torácica", "dorp", { nao: "Ausente", sim: "PRESENTE" }),
       item("Dispneia", "ex_eupne", { normal: "Ausente", alterado: "PRESENTE" })]));
@@ -2203,16 +2225,22 @@ button { font: inherit; color: inherit; }
     "eas": [["eas","achado_exame"]], "enca": [["encaminhamento","text"]],
     "esco": [["escolaridade","escolaridade"]], "estatura": [["estatura_cm","numeric"]],
     "estc": [["estado_civil","estado_civil"]], "ex_afebr": [["ex_afebril","achado_exame"]],
-    "ex_buln": [["ex_bulhas","achado_exame"]], "ex_espe": [["ex_especular","achado_exame"]],
+    "ex_buln": [["ex_bulhas","achado_exame"]],
+    "ex_edema": [["edema","achado_exame"]],
+    "ex_espe": [["ex_especular","achado_exame"]],
     "ex_eupne": [["grav_dispneia","presenca"]], "ex_hidra": [["ex_hidratada","achado_exame"]],
     "ex_mams": [["ex_mamas","achado_exame"]],
-    "ex_mmii": [["ex_membros_inferiores","achado_exame"]],
     "ex_murv": [["ex_murmurio_vesicular","achado_exame"]],
     "ex_orien": [["ex_orientada","achado_exame"]],
+    "ex_pantu": [["panturrilhas","achado_exame"]],
     "ex_ritm": [["ex_ritmo_cardiaco","achado_exame"]],
     "ex_ruid": [["ex_ruidos_adventicios","achado_exame"]],
     "ex_sopr": [["ex_sopros","achado_exame"]], "ex_tire": [["ex_tireoide","achado_exame"]],
-    "ex_vigil": [["ex_vigil","achado_exame"]], "exdet_mams": [["ex_mamas_alteracoes","text"]],
+    "ex_vigil": [["ex_vigil","achado_exame"]],
+    "exdet_edema": [["edema_observacao","text"]],
+    "exdet_espe": [["ex_especular_alteracoes","text"]],
+    "exdet_mams": [["ex_mamas_alteracoes","text"]],
+    "exdet_pantu": [["panturrilhas_observacao","text"]],
     "exobs": [["ex_observacoes","text"]], "fam_diab": [["fam_diabetes","estado_clinico"]],
     "fam_ecla": [["fam_eclampsia","estado_clinico"]],
     "fam_gemel": [["fam_gestacao_gemelar","estado_clinico"]],
@@ -2572,7 +2600,6 @@ button { font: inherit; color: inherit; }
     if (t.dataset.hab) { set("hab_" + t.dataset.hab, get("hab_" + t.dataset.hab) === t.dataset.v ? null : t.dataset.v); render(); return; }
     if (t.dataset.soro) { set("soro_" + t.dataset.soro, get("soro_" + t.dataset.soro) === t.dataset.v ? null : t.dataset.v); render(); return; }
     if (t.dataset.vac) { set("vac_" + t.dataset.vac, get("vac_" + t.dataset.vac) === t.dataset.v ? null : t.dataset.v); render(); return; }
-    if (t.dataset.edema) { set("edema", get("edema") === t.dataset.edema ? null : t.dataset.edema); render(); return; }
     if (t.dataset.ret) { set("retorno", get("retorno") === t.dataset.ret ? null : t.dataset.ret); render(); return; }
     if (t.dataset.cond2) { set("cond_" + t.dataset.cond2, get("cond_" + t.dataset.cond2) === "sim" ? null : "sim"); render(); return; }
 
