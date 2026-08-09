@@ -359,10 +359,6 @@ button { font: inherit; color: inherit; }
 .botao--neutro { background: var(--branco); border-color: var(--borda-forte); color: var(--texto); }
 .botao--neutro:hover { background: #eef2f5; }
 
-.marca-planilha {
-  font-size: 9.5px; color: #b6c0ca; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-}
-
 /* Chips de resposta com largura uniforme. Sem isso cada opcao ficava do
    tamanho da propria palavra e as sorologias viravam sete linhas de larguras
    diferentes -- o olho perde a coluna e precisa reler cada rotulo. */
@@ -590,7 +586,8 @@ button { font: inherit; color: inherit; }
       { id: "vigil", nome: "Vígil", cod: "400" }, { id: "orien", nome: "Orientada", cod: "401" },
       { id: "hidra", nome: "Hidratada", cod: "402" },
       { id: "afebr", nome: "Afebril", cod: "404" } ] },
-    { g: "Tireoide", itens: [ { id: "tire", nome: "Tireoide", cod: "409", normal: "elástica, sem nodulações" } ] },
+    { g: "Tireoide", itens: [ { id: "tire", nome: "Tireoide", cod: "409", normal: "elástica, sem nodulações",
+      det: true, detRot: "O que foi encontrado na tireoide?" } ] },
     { g: "Ausculta pulmonar", itens: [
       { id: "murv", nome: "Murmúrio vesicular", cod: "410", normal: "presente e simétrico" },
       { id: "ruid", nome: "Ruídos adventícios", cod: "411", normal: "ausentes" } ] },
@@ -705,14 +702,17 @@ button { font: inherit; color: inherit; }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   /* Marca o codigo da planilha ao lado do rotulo. "novo" identifica variavel que
      nao existe no Excel e foi acrescentada com aval da medica. */
-  /* Marca o codigo da planilha ao lado do rotulo. A estatura nao tem codigo
-     (e a unica variavel fora da planilha) e por isso passa null: o selo
-     "variavel nova" saiu da tela a pedido da medica -- e informacao sobre a
-     origem do campo, nao sobre a paciente. */
-  function cod(c) {
-    if (!c) { return ""; }
-    return '<span class="marca-planilha">[' + c + "]</span>";
-  }
+  /* Os codigos da planilha entre colchetes ([200], [409]...) sairam da tela a
+     pedido da medica (2026-08-09): ruido visual sem uso na consulta. A lista
+     completa de variaveis e codigos continua documentada em
+     docs/variaveis.md e docs/backend/contrato.md, gerados de docs/campos.yaml.
+
+     TODA CHAMADA cod(codigo) continua no fonte, propositalmente -- apagar as
+     chamadas apagaria a conferencia cruzada: scripts/gerar_contrato.py le
+     estas chamadas (via regex sobre o proprio HTML) para confirmar que
+     registro e tela citam os mesmos codigos nos dois sentidos. So o RENDER
+     precisava sumir; a auditoria continua de pe. */
+  function cod(c) { return ""; }
 
   /* ---- controle de 3 estados -------------------------------------------- */
   function tri(chave, opcoes) {
@@ -1382,13 +1382,7 @@ button { font: inherit; color: inherit; }
           { v: "neg", r: "Negativo" }, { v: "pos", r: "Positivo" },
           { v: "nsabe", r: "Não realizado" }]));
 
-    var abo = get("abo"), rh = get("rh");
-    if ((abo && abo !== "nsabe") && !rh) {
-      h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
-        "<b>Grupo ABO informado sem o fator Rh.</b> Depois ninguém sabe se é positivo ou negativo — " +
-        "e é o Rh que decide a pesquisa de anticorpos irregulares. Aviso apenas, não bloqueia." +
-        "</div></div>";
-    }
+    var rh = get("rh");
 
     // Coombs NUNCA some; Rh negativo da realce, nao visibilidade.
     var rhNeg = rh === "neg";
@@ -1798,6 +1792,19 @@ button { font: inherit; color: inherit; }
 
   /* Redesenhar troca o HTML do painel, o que tira o foco do campo em que a
      pessoa esta digitando. Guardamos qual era e devolvemos o cursor.          */
+  /* Troca de bloco: os dois unicos lugares que reatribuem blocoAtivo passam
+     por aqui. render() troca o innerHTML do painel, mas trocar innerHTML NAO
+     reseta o scroll do container -- ele fica na posicao onde a rolagem
+     anterior parou, mostrando o meio do bloco novo. So reseta AQUI, e nao
+     dentro de render(): render() tambem roda em redesenhos DENTRO do mesmo
+     bloco (REDESENHA, condicionais), onde perder a posicao de leitura seria
+     regressao, nao correcao. */
+  function mudarBloco(id) {
+    blocoAtivo = id;
+    render();
+    painel.scrollTop = 0;
+  }
+
   function render() {
     var ativo = document.activeElement;
     var foco = ativo && ativo.dataset ? (ativo.dataset.k || ativo.dataset.gl) : null;
@@ -1826,7 +1833,12 @@ button { font: inherit; color: inherit; }
     if (foco) {
       var novo = painel.querySelector('[data-k="' + foco + '"], [data-gl="' + foco + '"]');
       if (novo) {
-        novo.focus();
+        // preventScroll: o elemento e um NO NOVO (innerHTML inteiro trocou),
+        // entao o navegador nao sabe que ele ocupa a mesma posicao de antes e
+        // rola a pagina para garantir visibilidade -- mesmo classe de defeito
+        // que a rolagem nao voltar ao topo ao trocar de bloco, so que ao
+        // contrario: aqui NAO deveria rolar nada, e rolava.
+        novo.focus({ preventScroll: true });
         if (pos !== null) { try { novo.setSelectionRange(pos, pos); } catch (e) { /* input sem seleção */ } }
       }
     }
@@ -2241,6 +2253,7 @@ button { font: inherit; color: inherit; }
     "exdet_espe": [["ex_especular_alteracoes","text"]],
     "exdet_mams": [["ex_mamas_alteracoes","text"]],
     "exdet_pantu": [["panturrilhas_observacao","text"]],
+    "exdet_tire": [["ex_tireoide_alteracoes","text"]],
     "exobs": [["ex_observacoes","text"]], "fam_diab": [["fam_diabetes","estado_clinico"]],
     "fam_ecla": [["fam_eclampsia","estado_clinico"]],
     "fam_gemel": [["fam_gestacao_gemelar","estado_clinico"]],
@@ -2588,8 +2601,8 @@ button { font: inherit; color: inherit; }
     var t = ev.target.closest("button");
     if (!t) { return; }
 
-    if (t.dataset.bloco) { blocoAtivo = t.dataset.bloco; render(); return; }
-    if (t.dataset.irCalc) { blocoAtivo = "calc"; render(); return; }
+    if (t.dataset.bloco) { mudarBloco(t.dataset.bloco); return; }
+    if (t.dataset.irCalc) { mudarBloco("calc"); return; }
 
     // controle de 3 estados: clicar no selecionado volta para "não avaliado"
     if (t.parentElement && t.parentElement.dataset.tri) {
