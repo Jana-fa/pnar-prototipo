@@ -155,17 +155,6 @@ button { font: inherit; color: inherit; }
 .campo textarea { resize: vertical; min-height: 54px; }
 .campo__dica { font-size: 10.5px; color: var(--texto-fraco); }
 .campo--derivado input { background: var(--verde-fraco); border-style: dashed; }
-/* datacao: campo + botao "ajustar" na mesma linha (D-27).
-   As larguras precisam vencer o `width: 100%` da regra geral de .campo input
-   -- sem isso cada caixa toma a linha inteira e semanas/dias empilham. */
-.datacao__par { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
-.campo .datacao__par input[type="date"] { flex: 1 1 auto; min-width: 0; width: auto; }
-.datacao__par .atalho { flex: none; white-space: nowrap; }
-.campo .datacao__par .ig-num { width: 42px; flex: 0 0 42px; text-align: center; padding: 6px 4px; }
-.ig-un { font-size: 11px; color: var(--texto-fraco); flex: none; }
-/* readonly nao e "desabilitado": o valor se le e se copia, so nao se digita
-   sem passar pelo botao. O cursor conta essa historia. */
-.datacao__par input[readonly] { cursor: default; }
 .selo-derivado {
   font-size: 9.5px; background: var(--verde-fraco); color: var(--verde-esc);
   border: 1px solid #b9e8dc; border-radius: 2px; padding: 1px 5px; font-weight: 700;
@@ -192,20 +181,6 @@ button { font: inherit; color: inherit; }
    semanticas abaixo sobrescrevem quando ha polaridade clinica; onde nao ha, o
    azul neutro marca a escolha sem sugerir que ela e boa ou ruim. */
 .tri button.on { background: var(--azul); color: #fff; font-weight: 600; }
-
-/* Unidade colada ao valor: dois chips arredondados, na MESMA linha do numero.
-   Como campo separado na grade, a unidade caia na linha de baixo e ficava longe
-   do numero que qualifica. Chips soltos (nao segmentados) para nao parecerem um
-   controle de estado clinico -- aqui a escolha e de unidade de laudo. */
-.campo--unidade .campo__linha { display: flex; align-items: center; gap: 6px; }
-.campo--unidade .campo__linha input { flex: 1 1 62px; min-width: 0; max-width: 76px; }
-.tri--chips { border: 0; border-radius: 0; overflow: visible; gap: 4px; flex: none; }
-.tri--chips button {
-  border: 1px solid var(--borda-forte); border-radius: 999px;
-  padding: 3px 9px; font-size: 10.5px; line-height: 1.4;
-}
-.tri--chips button:last-child { border-right: 1px solid var(--borda-forte); }
-.tri--chips button.on { border-color: var(--azul); }
 .tri button.on[data-v="nao"], .tri button.on[data-v="normal"] { background: var(--verde); }
 .tri button.on[data-v="sim"], .tri button.on[data-v="alterado"] { background: var(--vermelho); }
 .tri button.on[data-v="nsabe"], .tri button.on[data-v="naval"] { background: #9aa8b5; }
@@ -298,6 +273,14 @@ button { font: inherit; color: inherit; }
 .cartao-calc__valor {
   font-size: 24px; font-weight: 300; color: var(--texto-forte);
   margin-top: 2px; font-variant-numeric: tabular-nums;
+}
+/* Asterisco do alinhamento com a calculadora oficial: visivel o bastante para
+   levar o olho ate a nota de rodape do cartao, pequeno o bastante para nao
+   competir com o numero. Cor neutra de proposito -- e ressalva de metodo, nao
+   alerta clinico, e ambar aqui leria como alarme. */
+.cartao-calc__ast {
+  font-size: 15px; font-weight: 700; color: var(--texto);
+  vertical-align: super; margin-left: 1px;
 }
 .cartao-calc__nivel {
   margin-left: auto; font-size: 12px; font-weight: 700;
@@ -450,8 +433,8 @@ button { font: inherit; color: inherit; }
     <div class="modal__topo">
       <div class="modal__titulo">1ª consulta médica <small>PNAR — pré-natal de alto risco</small></div>
       <div class="paciente">
-        <div><span>Paciente</span><b>Maria de Souza</b></div>
-        <div><span>Idade</span><b>31 anos</b></div>
+        <div><span>Paciente</span><b id="topo-nome">—</b></div>
+        <div><span>Idade</span><b id="topo-idade">—</b></div>
         <div><span>IG hoje</span><b id="topo-ig">—</b></div>
       </div>
       <button class="fechar" id="fechar" aria-label="Fechar">&times;</button>
@@ -466,12 +449,34 @@ button { font: inherit; color: inherit; }
       <div class="piers" id="piers"></div>
       <div class="acoes" style="margin-left:auto">
         <button class="botao botao--neutro" id="rascunho">Salvar rascunho</button>
-        <!-- "Exportar", nao "Concluir": enquanto o AGHU for o prontuario
-             oficial, o fim do atendimento aqui e levar o texto para la. -->
-        <button class="botao botao--principal" id="exportar">Exportar atendimento</button>
+        <!-- "Finalizar consulta" GRAVA. Exportar deixou de ser o fim do
+             atendimento e virou o passo seguinte: sai no popup de confirmacao,
+             depois que existe protocolo. A ordem importa — exportar antes de
+             gravar produzia texto colado no AGHU sem nada guardado aqui. -->
+        <button class="botao botao--principal" id="finalizar">Finalizar consulta</button>
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Popup de confirmacao da gravacao. Nasce DEPOIS do INSERT e diz exatamente
+     onde a consulta parou: servidor, so este navegador, ou nenhum dos dois.
+     "Exportar atendimento" mora aqui dentro porque exportar e o passo seguinte
+     a gravar, nao um caminho alternativo a ela. -->
+<div class="fundo-modal" id="modal-salvo" style="display:none;z-index:70">
+  <div class="modal" style="max-width:600px;height:auto" role="dialog" aria-modal="true" aria-label="Consulta finalizada">
+    <div class="modal__topo">
+      <div class="modal__titulo" id="salvo-titulo">Consulta finalizada</div>
+      <button class="fechar" id="salvo-fechar-x" aria-label="Fechar">&times;</button>
+    </div>
+    <div style="padding:16px 18px" id="salvo-corpo"></div>
+    <div class="modal__rodape">
+      <div class="acoes" style="margin-left:auto">
+        <button class="botao botao--neutro" id="salvo-fechar">Fechar</button>
+        <button class="botao botao--principal" id="salvo-exportar">Exportar atendimento</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -687,9 +692,9 @@ button { font: inherit; color: inherit; }
   }
 
   /* ---- controle de 3 estados -------------------------------------------- */
-  function tri(chave, opcoes, variante) {
+  function tri(chave, opcoes) {
     var atual = get(chave);
-    var h = '<span class="tri' + (variante ? " " + variante : "") + '" data-tri="' + chave + '">';
+    var h = '<span class="tri" data-tri="' + chave + '">';
     opcoes.forEach(function (o) {
       h += '<button type="button" data-v="' + o.v + '"' + (atual === o.v ? ' class="on"' : "") +
            ' aria-pressed="' + (atual === o.v) + '">' + esc(o.r) + "</button>";
@@ -700,102 +705,38 @@ button { font: inherit; color: inherit; }
   var SIM_NAO_SABE = [{ v: "nao", r: "Não" }, { v: "sim", r: "Sim" }, { v: "nsabe", r: "Não sabe" }];
   var NORMAL_ALT = [{ v: "normal", r: "Normal" }, { v: "alterado", r: "Alterado" }];
 
-  /* ---- datacao: DPP e IG derivam da DUM ate alguem AJUSTAR (D-27) --------
-     Os tres campos ficam na mesma linha, como sempre. DPP e IG nascem
-     derivadas e READONLY, com selo dizendo de onde vieram; o botao "ajustar"
-     e o unico caminho para digitar por cima, e "voltar ao cálculo" desfaz.
-     Assim "presumida" e "informada" nao disputam o mesmo campo: o estado do
-     campo diz qual das duas esta na tela, e trocar de estado exige um gesto.
-
-     UM ajuste por vez: ajustar a IG faz a DPP derivar dela, e vice-versa --
-     dois ajustes simultaneos poderiam se contradizer.
-
-     O que fica gravado do ajuste NAO e o texto "30s 2d", e sim o DIA ZERO
-     (datacao_ancora_data). Guardar a IG crua congelaria a paciente na idade
-     do dia em que foi digitada e faria a DPP escorregar um dia por dia --
-     defeito medido no desenho anterior. Com o dia zero, a IG envelhece
-     sozinha e a DPP fica fixa, que e o comportamento clinico correto.
-
-     A DUM tem protecao extra: e relato da paciente, e o calculo NUNCA escreve
-     nela -- a DUM equivalente aparece como dica fora do campo (mesmo
-     principio da SpO2 imputada, D-08). A referencia temporal e "hoje"
-     enquanto nao existe data_consulta (pendencia 16). */
-  var DIA_MS = 86400000;
-  var SEM_MAX = 45;
-  function isoDe(d) { return d.toISOString().slice(0, 10); }
-  // meio-dia local evita que toISOString() troque o dia em qualquer fuso
-  function lerDataISO(iso) {
+  /* ---- idade gestacional derivada da DUM -------------------------------- */
+  function calcIG() {
+    var dum = get("dum");
+    if (!dum) { return null; }
+    var d = new Date(dum + "T00:00:00");
+    if (isNaN(d)) { return null; }
+    var dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if (dias < 0 || dias > 320) { return null; }
+    return { sem: Math.floor(dias / 7), dias: dias % 7, total: dias };
+  }
+  /* Idade em anos completos a partir do nascimento. Conta pelo aniversario ja
+     ocorrido, nao por divisao de dias: 365,25 erra em 1 ano perto do
+     aniversario, e idade errada muda faixa de risco obstetrico. Data futura ou
+     absurda devolve null em vez de numero negativo. */
+  function idadeDe(iso) {
     if (!iso) { return null; }
-    var d = new Date(iso + "T12:00:00");
-    return isNaN(d) ? null : d;
+    var d = new Date(iso + "T00:00:00");
+    if (isNaN(d)) { return null; }
+    var h = new Date(), a = h.getFullYear() - d.getFullYear();
+    var m = h.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && h.getDate() < d.getDate())) { a--; }
+    return (a < 0 || a > 120) ? null : a;
   }
-  function hojeMeioDia() {
-    var a = new Date();
-    return new Date(a.getFullYear(), a.getMonth(), a.getDate(), 12);
-  }
-  /* Semanas e dias sao campos SEPARADOS e independentes (352 e 353). Semanas
-     em branco = nada digitado. DIAS em branco NAO e zero: fica NULO no
-     registro, como a nota do 353 sempre exigiu -- o calculo usa 0 e a tela
-     diz que usou, em vez de fingir que a pessoa respondeu "0". */
-  function igDigitada() {
-    var s = get("ig_sem");
-    if (s === undefined || s === "") { return null; }
-    var sem = parseInt(s, 10);
-    if (isNaN(sem) || sem > SEM_MAX) { return null; }
-    var bruto = get("ig_dias");
-    var ausente = (bruto === undefined || bruto === "");
-    var dias = ausente ? 0 : parseInt(bruto, 10);
-    if (isNaN(dias) || dias > 6) { return null; }
-    return { sem: sem, dias: dias, total: sem * 7 + dias, diasAusente: ausente };
-  }
-  function ig(total) {
-    return { sem: Math.floor(total / 7), dias: total % 7, total: total };
-  }
-  function fmtIG(o) { return o ? o.sem + "s " + o.dias + "d" : null; }
-  /* Dia zero do ajuste, gravado no momento em que a pessoa digita. E o que
-     torna o ajuste estavel no tempo. */
-  function ancorarPorIG() {
-    var d = igDigitada();
-    set("datacao_ancora_data",
-        d ? isoDe(new Date(hojeMeioDia().getTime() - d.total * DIA_MS)) : null);
-  }
-  function ancorarPorDPP() {
-    var d = lerDataISO(get("dpp_informada"));
-    set("datacao_ancora_data",
-        d ? isoDe(new Date(d.getTime() - 280 * DIA_MS)) : null);
-  }
-  function datacao() {
-    var hoje = hojeMeioDia();
-    var dumD = lerDataISO(get("dum"));
-    var ajuste = get("datacao_ajuste") || "";        // "" | "ig" | "dpp"
-    var ancD = lerDataISO(get("datacao_ancora_data"));
-    var r = { ajuste: ajuste, temDum: !!dumD, temAjuste: !!(ajuste && ancD) };
 
-    // a datacao por DUM continua calculavel mesmo com ajuste ativo: e ela que
-    // aparece na dica, para a alternativa nunca se perder de vista
-    if (dumD) {
-      var gd = Math.round((hoje - dumD) / DIA_MS);
-      if (gd >= 0 && gd <= 320) {
-        r.porDum = { ig: ig(gd), dpp: isoDe(new Date(dumD.getTime() + 280 * DIA_MS)) };
-      } else { r.dumImplausivel = true; }
-    }
-
-    var vig = r.temAjuste ? ancD : dumD;
-    r.origem = r.temAjuste ? ajuste : (dumD ? "dum" : null);
-    if (!vig) { return r; }
-    var g = Math.round((hoje - vig) / DIA_MS);
-    if (g < 0 || g > 320) { r.implausivel = true; return r; }
-    r.ig = ig(g);
-    r.dpp = isoDe(new Date(vig.getTime() + 280 * DIA_MS));   // regra de Naegele
-    r.dumEq = isoDe(vig);
-    // de quanto o ajuste afasta a datacao do que a DUM diria
-    if (r.porDum && r.temAjuste) { r.difDias = g - r.porDum.ig.total; }
-    return r;
+  function calcDPP() {
+    var dum = get("dum");
+    if (!dum) { return null; }
+    var d = new Date(dum + "T00:00:00");
+    if (isNaN(d)) { return null; }
+    d.setDate(d.getDate() + 280);           // regra de Naegele
+    return d.toISOString().slice(0, 10);
   }
-  /* leitura VIGENTE para quem consome a datacao (topo, rodape, fullPIERS,
-     exportacao): o ajuste quando existe, a DUM quando nao. */
-  function calcIG() { return datacao().ig || null; }
-  function calcDPP() { return datacao().dpp || null; }
   function fmtData(iso) {
     if (!iso) { return "—"; }
     var p = iso.split("-");
@@ -813,6 +754,10 @@ button { font: inherit; color: inherit; }
 
   /* ====================================================================== *
      fullPIERS — von Dadelszen et al., Lancet 2011.
+
+     ATENCAO: o que roda aqui NAO e mais a equacao literal do artigo. A IG
+     entra deslocada em uma semana, para bater com a calculadora oficial do
+     PRE-EMPT/UBC -- ver PIERS_IG_DESLOC_OFICIAL logo abaixo (D-27).
 
      logit(pi) = 2,68
                + (-5,41e-2 x IG)        IG em SEMANAS (decimal)
@@ -843,9 +788,39 @@ button { font: inherit; color: inherit; }
    * ====================================================================== */
   var CREAT_MGDL_PARA_UMOLL = 88.4;
 
+  /* ---- ALINHAMENTO COM A CALCULADORA OFICIAL -----------------------------
+     Decisao da medica, 2026-08-09 (D-27). O numero desta tela passa a bater
+     com o da calculadora do PRE-EMPT/UBC, mantida pelos proprios autores do
+     modelo -- que e contra quem se confere o resultado na beira do leito.
+
+     O QUE FOI MEDIDO. Mesma entrada nos dois lados (20s6d, dor/dispneia Sim,
+     SpO2 97, plaquetas 250, creatinina 60 umol/L, TGO 20): oficial 4,2%,
+     nosso 4,4231%. No logit a diferenca e -0,054087.
+
+     DE ONDE ELA VEM. Resolvendo para cada insumo, um so cai em valor redondo:
+     IG uma semana maior (-5,41e-2 x 1 = -0,0541, contra -0,054087 necessarios).
+     Os outros pedem valores sem sentido -- creatinina 58,47, plaquetas 257,01,
+     AST 27,21, SpO2 97,085. A hipotese concorrente, coeficiente da creatinina
+     -2,80e-2 em vez de -2,71e-2, fechava igualmente exata e foi DERRUBADA por
+     transcricao independente da equacao do Lancet, que confirma -2,71e-2.
+
+     O QUE ISSO CUSTA. Uma semana de IG vale 0,0541 no logit: so troca a faixa
+     de risco numa janela de 0,14 pp em torno de 2,5% e 1,15 pp em torno de 30%.
+
+     O QUE FALTA. A conclusao se apoia em UM caso. Os tres casos que a
+     confirmam -- e que separam alinhamento constante de erro proporcional a
+     creatinina -- estao em docs/sessoes/sessao-2026-08-09-pnar.md, junto com
+     o que reabriria a decisao. Zerar esta constante restaura a equacao
+     literal do artigo, e nada mais muda.
+
+     A IG MOSTRADA NA TELA NAO MUDA. So o valor que entra no modelo. O cartao
+     declara o alinhamento com asterisco, e a exportacao leva a nota junto. */
+  var PIERS_IG_DESLOC_OFICIAL = 1;
+
   function fullPiers(igSem, dorDisp, crUmol, plt, ast, spo2) {
+    var igModelo = igSem + PIERS_IG_DESLOC_OFICIAL;   // D-27, nao e a IG da paciente
     var l = 2.68 +
-      (-5.41e-2 * igSem) +
+      (-5.41e-2 * igModelo) +
       (1.23 * dorDisp) +
       (-2.71e-2 * crUmol) +
       (2.07e-1 * plt) +
@@ -879,11 +854,16 @@ button { font: inherit; color: inherit; }
     var spo2Imputada = !spo2Medida;
     var spo2Usada = spo2Medida || "97";
 
-    /* igSem em semanas decimais, pela datacao VIGENTE (D-27): a ancora pode
-       ser a DUM, a IG informada ou a DPP. IG digitada que nao se interpreta
-       conta como insumo ausente em vez de virar zero -- e nao cai para a DUM,
-       porque a correcao existe, so nao foi lida. */
-    var igVig = calcIG(), igSem = igVig ? igVig.sem + igVig.dias / 7 : null;
+    /* igSem em semanas decimais; a IG informada por USG ("24s 3d") tem de ser
+       interpretada, e se nao der para ler o numero o insumo conta como ausente
+       em vez de virar zero. */
+    var igCalc = calcIG(), igInfTxt = get("ig_informada"), igSem = null;
+    if (igInfTxt) {
+      var m = String(igInfTxt).match(/(\d+)\s*s(?:em)?\D*(\d+)?/i);
+      if (m) { igSem = parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 7 : 0); }
+    } else if (igCalc) {
+      igSem = igCalc.sem + igCalc.dias / 7;
+    }
 
     // Numero sem unidade nao e insumo: crUmol so existe com os DOIS presentes.
     var crBruto = parseFloat(get("creat"));
@@ -912,7 +892,7 @@ button { font: inherit; color: inherit; }
     var pode = igSem !== null && dorDisp !== null && crUmol !== null &&
                !isNaN(plt) && !isNaN(ast) && !isNaN(spo2Num);
     return {
-      igVig: igVig, igSem: igSem,
+      igCalc: igCalc, igInfTxt: igInfTxt, igSem: igSem,
       crBruto: crBruto, crUnid: crUnid, crUmol: crUmol,
       plt: plt, ast: ast,
       spo2Imputada: spo2Imputada, spo2Usada: spo2Usada, spo2Num: spo2Num,
@@ -938,16 +918,14 @@ button { font: inherit; color: inherit; }
        imputacao automatica. */
     var z = insumosPiers();
     var spo2Imputada = z.spo2Imputada, spo2Usada = z.spo2Usada, spo2Num = z.spo2Num;
-    var igVig = z.igVig, igSem = z.igSem;
+    var igCalc = z.igCalc, igInfTxt = z.igInfTxt, igSem = z.igSem;
     var crBruto = z.crBruto, crUnid = z.crUnid, crUmol = z.crUmol;
     var plt = z.plt, ast = z.ast, dorDisp = z.dorDisp;
 
     var estado = PIERS.map(function (i) {
       if (i.k === "spo2") { return { i: i, tem: true, imputado: spo2Imputada, valor: spo2Usada + "%" }; }
       if (i.k === "ig") {
-        // vigente pela ancora (D-27); IG digitada ilegivel aparece como texto,
-        // mas conta como faltando -- igSem null nunca vira zero
-        var v = fmtIG(igVig);
+        var v = igInfTxt || (igCalc ? igCalc.sem + "s " + igCalc.dias + "d" : null);
         return { i: i, tem: igSem !== null, imputado: false, valor: v };
       }
       var g = get(i.k);
@@ -1026,7 +1004,8 @@ button { font: inherit; color: inherit; }
       var f = faixaPiers(prob);
       cor = f.cor;
       selo = f.rot;
-      valorTxt = (prob * 100).toFixed(prob < 0.1 ? 1 : 0).replace(".", ",") + "%";
+      valorTxt = (prob * 100).toFixed(prob < 0.1 ? 1 : 0).replace(".", ",") +
+        '%<span class="cartao-calc__ast">*</span>';
       topicos.push("Faixas do artigo: <b>baixo</b> abaixo de 2,5% · <b>alto</b> a partir de 30%");
       if (spo2Imputada) {
         topicos.push("<b>SpO₂ assumida em 97%</b>, não medida — o erro cai para o lado tranquilizador");
@@ -1040,6 +1019,14 @@ button { font: inherit; color: inherit; }
     topicos.push("Prevê as próximas <b>48 h</b>; o desempenho cai a cada dia");
     topicos.push("AUROC <b>0,68</b> em validação externa, contra 0,88 na derivação");
     topicos.push("Derivado em gestantes <b>internadas</b> com pré-eclâmpsia");
+    /* Nota de rodape do asterisco: fica por ultimo, posicao de rodape, e so
+       quando existe numero para o asterisco marcar. Nao e alerta clinico —
+       e a declaracao de que este numero nao sai da equacao literal. */
+    if (pode) {
+      topicos.push("<b>*</b> Idade gestacional alinhada à <b>calculadora oficial</b> " +
+        "(PRE-EMPT/UBC), que usa uma semana a mais que a equação publicada no " +
+        "<i>Lancet</i>. A IG mostrada acima é a da paciente e não muda");
+    }
 
     h += '<div class="cartao-calc cartao-calc--' + cor + '">' +
       '<div class="cartao-calc__topo">' +
@@ -1059,9 +1046,22 @@ button { font: inherit; color: inherit; }
 
 
   telas.ident = function () {
+    /* Nome, nascimento e prontuario deixaram de vir de um cadastro mockado e
+       viraram campos digitados. A idade nao virou campo: e DERIVADA do
+       nascimento, no mesmo molde da DPP -- dois lugares para a mesma verdade
+       divergem, e aqui o que diverge e a identidade da paciente. */
+    var id = idadeDe(get("dnasc"));
     return '<h2 class="painel__titulo">Identificação</h2>' +
-      '<p class="painel__nota">Nome e idade vêm do cadastro da paciente.</p>' +
+      '<p class="painel__nota">Nome, nascimento e prontuário identificam o atendimento ao gravar. ' +
+      "A idade é calculada a partir da data de nascimento.</p>" +
       '<div class="campos">' +
+      campoTexto("nome", "Nome completo", null, "g") +
+      campoData("dnasc", "Data de nascimento", null, "p") +
+      '<div class="campo campo--p campo--derivado"><label>Idade ' + cod("100") +
+      ' <span class="selo-derivado">por nascimento</span></label>' +
+      '<input data-derivado="idade" value="' + (id === null ? "" : id + " anos") +
+      '" readonly placeholder="informe o nascimento"></div>' +
+      campoTexto("prontuario", "Nº de prontuário", null, "p") +
       campoTexto("cida", "Naturalidade (cidade)", "101", "m") +
       campoSelect("zonr", "Zona de residência", "102", ["Urbana", "Área rural"], "m") +
       campoTexto("tele", "Telefone", "103", "m", "tel") +
@@ -1071,45 +1071,26 @@ button { font: inherit; color: inherit; }
       "</div>";
   };
 
-  /* DPP e IG nascem derivadas e readonly; o botao "ajustar" abre a digitacao
-     (D-27). A tela desenha a ESTRUTURA; valores, selos e dicas entram em
-     seguida por atualizarDatacao() -- fonte unica, para o desenho e a
-     atualizacao em lugar nao poderem divergir. */
   telas.gesta = function () {
-    var d = datacao();
-    var ajIG = d.ajuste === "ig", ajDPP = d.ajuste === "dpp";
+    var ig = calcIG(), dpp = calcDPP();
+    var igInf = get("ig_informada");
     var h = '<h2 class="painel__titulo">Gestação atual</h2>' +
       '<p class="painel__nota">Data provável do parto e idade gestacional são calculadas a partir da DUM. ' +
-      'Use <b>ajustar</b> para corrigir por ultrassonografia — o valor corrigido fica marcado como informado, ' +
-      "e o cálculo pela DUM continua visível.</p>" +
-      '<div class="campos">';
+      "Corrigir a IG por ultrassonografia é registrado como informada.</p>" +
+      '<div class="campos">' +
+      campoData("dum", "Data da última menstruação", "350", "m");
 
-    h += '<div class="campo campo--m" id="campo-dum"><label>Data da última menstruação ' + cod("350") + "</label>" +
-      '<input type="date" data-k="dum" value="' + esc(get("dum") || "") + '">' +
-      '<span class="campo__dica" id="dica-dum"></span></div>';
+    h += '<div class="campo campo--m campo--derivado"><label>Data provável do parto ' + cod("351") +
+      ' <span class="selo-derivado">por DUM</span></label>' +
+      '<input data-derivado="dpp" value="' + (dpp ? fmtData(dpp) : "") +
+      '" readonly placeholder="informe a DUM">' +
+      '<span class="campo__dica">regra de Naegele: DUM + 280 dias</span></div>';
 
-    h += '<div class="campo campo--m" id="campo-dpp"><label>Data provável do parto ' + cod("351") +
-      ' <span id="selo-dpp"></span></label><div class="datacao__par">' +
-      '<input type="date" id="dpp-campo" data-k="dpp_informada"' + (ajDPP ? "" : " readonly") +
-      ' value="' + esc(ajDPP ? (get("dpp_informada") || "") : "") + '">' +
-      '<button type="button" class="atalho" data-datacao="' + (ajDPP ? "voltar" : "ajustar") + '" data-alvo="dpp">' +
-      (ajDPP ? "voltar ao cálculo" : "ajustar") + "</button></div>" +
-      '<span class="campo__dica" id="dica-dpp"></span></div>';
-
-    /* Semanas e dias em caixas separadas, sempre -- readonly quando derivadas,
-       digitaveis depois de "ajustar". A forma nao muda entre os dois estados:
-       so a borda, o selo e o botao. */
-    h += '<div class="campo campo--m" id="campo-ig"><label>Idade gestacional ' + cod("352/353") +
-      ' <span id="selo-ig"></span></label><div class="datacao__par">' +
-      '<input class="ig-num" id="ig-sem" data-igp="sem" inputmode="numeric" maxlength="2"' +
-      (ajIG ? "" : " readonly") + ' value="' + esc(ajIG ? (get("ig_sem") || "") : "") + '">' +
-      '<span class="ig-un">sem</span>' +
-      '<input class="ig-num" id="ig-dias" data-igp="dias" inputmode="numeric" maxlength="1"' +
-      (ajIG ? "" : " readonly") + ' value="' + esc(ajIG ? (get("ig_dias") || "") : "") + '">' +
-      '<span class="ig-un">dias</span>' +
-      '<button type="button" class="atalho" data-datacao="' + (ajIG ? "voltar" : "ajustar") + '" data-alvo="ig">' +
-      (ajIG ? "voltar ao cálculo" : "ajustar") + "</button></div>" +
-      '<span class="campo__dica" id="dica-ig"></span></div>';
+    h += '<div class="campo campo--m' + (igInf ? "" : " campo--derivado") + '"><label>Idade gestacional ' + cod("352/353") +
+      (igInf ? ' <span class="selo-alerta">informada</span>' : ' <span class="selo-derivado">por DUM</span>') + "</label>" +
+      '<input id="ig-campo" value="' + (igInf ? igInf : (ig ? ig.sem + "s " + ig.dias + "d" : "")) +
+      '" placeholder="' + (ig ? ig.sem + "s " + ig.dias + "d" : "ex.: 24s 3d") + '">' +
+      '<span class="campo__dica">' + (igInf && ig ? "difere do cálculo pela DUM" : "editável — corrija se houver USG") + "</span></div>";
 
     h += "</div>";
 
@@ -1409,8 +1390,9 @@ button { font: inherit; color: inherit; }
       campoNum("plaq", "Plaquetas (mil/mm³)", "504", 5, 900) +
       campoNum("leuc", "Leucócitos (/mm³)", "505", 500, 60000) +
       campoNum("glic", "Glicose (mg/dL)", "507", 20, 600) +
-      campoNumUnidade("creat", "Creatinina", "515", 0.1, 1400, "creat_un",
-        [{ v: "mgdl", r: "mg/dL" }, { v: "umoll", r: "µmol/L" }]) +
+      campoNum("creat", "Creatinina", "515", 0.1, 1400) +
+      campoTri("creat_un", "Unidade da creatinina", null,
+        [{ v: "mgdl", r: "mg/dL" }, { v: "umoll", r: "µmol/L" }], "p") +
       campoNum("tgo", "TGO / AST (U/L)", "516", 1, 2000) +
       campoNum("totg1", "TOTG 1ª medida (mg/dL)", "508", 20, 400) +
       campoNum("totg2", "TOTG 2ª medida, 2 h (mg/dL)", "509", 20, 400) +
@@ -1695,21 +1677,6 @@ button { font: inherit; color: inherit; }
       '" data-k="' + k + '" value="' + esc(get(k) || "") + '">' +
       (dica ? '<span class="campo__dica">' + esc(dica) + "</span>" : "") + "</div>";
   }
-  /* Numero com a unidade COLADA nele, na mesma linha. A unidade e dado do
-     laudo, nao convencao do sistema (D-19) -- mas como campo separado na grade
-     ela caia na linha de baixo, longe do numero que qualifica, e a medica pediu
-     os dois juntos. Reusa o mecanismo de tri() (data-tri no pai, data-v nos
-     botoes), entao o clique e o terceiro estado continuam valendo: clicar na
-     unidade ja marcada a desmarca, e sem unidade o insumo conta como ausente. */
-  function campoNumUnidade(k, r, c, min, max, chaveUn, opcoes) {
-    return '<div class="campo campo--m campo--unidade"><label>' + esc(r) + " " + cod(c) + "</label>" +
-      '<div class="campo__linha">' +
-      '<input type="text" inputmode="decimal" data-num data-min="' + min + '" data-max="' + max +
-      '" data-k="' + k + '" value="' + esc(get(k) || "") + '">' +
-      tri(chaveUn, opcoes, "tri--chips") + "</div>" +
-      '<span class="campo__dica">' +
-      (get(chaveUn) ? "unidade do laudo" : "escolha a unidade do laudo") + "</span></div>";
-  }
   function campoData(k, r, c, t) {
     return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + " " + cod(c) + "</label>" +
       '<input type="date" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
@@ -1773,8 +1740,7 @@ button { font: inherit; color: inherit; }
   function desenhaPiers() {
     var alvo = document.getElementById("piers");
     var faltam = PIERS.filter(function (i) {
-      // IG digitada que nao se interpreta conta como FALTANDO, igual ao calculo
-      if (i.k === "ig") { return !calcIG(); }
+      if (i.k === "ig") { return !(calcIG() || get("ig_informada")); }
       // creatinina sem unidade e insumo ausente tambem no rodape
       if (i.k === "creat") { return !get("creat") || !get("creat_un"); }
       return !get(i.k);
@@ -1824,8 +1790,14 @@ button { font: inherit; color: inherit; }
     ajustarRotulos();
     desenhaTrilho();
     desenhaPiers();
-    // derivados, selos e dicas da datacao -- e a IG do topo (D-27)
-    atualizarDatacao();
+    var ig = calcIG();
+    document.getElementById("topo-ig").textContent = get("ig_informada") || (ig ? ig.sem + "s " + ig.dias + "d" : "—");
+    /* O cabecalho espelha o que foi digitado em Identificacao. Enquanto nao ha
+       nome, mostra travessao em vez de um nome de exemplo: paciente errada no
+       cabecalho e o comeco de atendimento gravado na pessoa errada. */
+    var idNasc = idadeDe(get("dnasc"));
+    document.getElementById("topo-nome").textContent = get("nome") || "—";
+    document.getElementById("topo-idade").textContent = idNasc === null ? "—" : idNasc + " anos";
 
     if (foco) {
       var novo = painel.querySelector('[data-k="' + foco + '"], [data-gl="' + foco + '"]');
@@ -1926,22 +1898,15 @@ button { font: inherit; color: inherit; }
       })),
       item("Outras observações sobre hábitos", "hab_obs")]);
 
-    /* A datacao sai com a mesma procedencia da tela (D-27): cada valor diz se
-       foi informado ou de onde derivou, e o ajuste leva junto o que a DUM
-       diria -- no papel a alternativa tambem nao se perde. DUM calculada so
-       aparece MARCADA como nao informada (D-08). */
-    var gesta = [], dt = datacao();
-    var marca = dt.temAjuste ? " (informada)" : " (" + (ROTULO_ORIGEM[dt.origem] || "") + ")";
-    if (get("dum")) { gesta.push("DUM: " + fmtData(get("dum"))); }
-    else if (dt.dumEq) {
-      gesta.push("DUM compatível: ≈ " + fmtData(dt.dumEq) + " (calculada — não informada)");
+    var gesta = [];
+    if (get("dum")) {
+      gesta.push("DUM: " + fmtData(get("dum")));
+      var dpp = calcDPP();
+      if (dpp) { gesta.push("DPP (por DUM): " + fmtData(dpp)); }
     }
-    if (dt.dpp) { gesta.push("DPP: " + fmtData(dt.dpp) + marca); }
-    if (dt.ig) { gesta.push("IG: " + fmtIG(dt.ig) + marca); }
-    if (dt.temAjuste && dt.porDum) {
-      gesta.push("pela DUM seria IG " + fmtIG(dt.porDum.ig) + " · DPP " + fmtData(dt.porDum.dpp) +
-        (dt.difDias ? " — " + Math.abs(dt.difDias) + " d de diferença" : ""));
-    }
+    var igInf = get("ig_informada"), igC = calcIG();
+    if (igInf) { gesta.push("IG: " + igInf + " (informada)"); }
+    else if (igC) { gesta.push("IG: " + igC.sem + "s " + igC.dias + "d (por DUM)"); }
     gesta.push(item("Gestação múltipla", "gest_multipla", EXP_SIMNAO));
     bloco("Gestação atual", [
       secao(null, gesta),
@@ -2071,6 +2036,12 @@ button { font: inherit; color: inherit; }
         if (z.crUnid === "mgdl") {
           notas.push("creatinina convertida de mg/dL para µmol/L (×88,4)");
         }
+        /* O asterisco do cartao tem de chegar no prontuario: o numero colado la
+           nao sai da equacao literal do artigo, e quem ler depois precisa saber
+           contra o que ele bate. Nota fixa, nao condicional — vale sempre que
+           houver numero (D-27). */
+        notas.push("idade gestacional alinhada à calculadora oficial do PRE-EMPT/UBC, " +
+          "uma semana a mais que a equação publicada no Lancet");
         bloco("Calculadoras", [
           "fullPIERS: " + pct + "% de probabilidade de desfecho materno adverso em 48 h (" +
           faixaPiers(z.prob).rot.toLowerCase() + ")" +
@@ -2111,8 +2082,15 @@ button { font: inherit; color: inherit; }
     var carimbo = dois(agora.getDate()) + "/" + dois(agora.getMonth() + 1) + "/" +
       agora.getFullYear() + " " + dois(agora.getHours()) + ":" + dois(agora.getMinutes());
 
+    /* A identificacao sai do que foi digitado, nunca de exemplo fixo. Peca nao
+       preenchida simplesmente nao aparece — a mesma regra do resto do texto. */
+    var idNasc = idadeDe(get("dnasc"));
+    var quem = [get("nome"), idNasc === null ? "" : idNasc + " anos",
+      get("dnasc") ? "nascida em " + fmtData(get("dnasc")) : "",
+      get("prontuario") ? "prontuário " + get("prontuario") : ""]
+      .filter(function (x) { return x; }).join(" · ");
     var cab = "1ª CONSULTA MÉDICA — PNAR (PRÉ-NATAL DE ALTO RISCO)\n" +
-      "Paciente: Maria de Souza · 31 anos\n";
+      (quem ? "Paciente: " + quem + "\n" : "Paciente não identificada nesta tela.\n");
     var corpo = blocos.length ? blocos.join("\n\n")
       : "Nenhum campo preenchido até agora.";
     var rodape = "\n\nExportado do AGMEJC (protótipo) em " + carimbo + " · " +
@@ -2145,6 +2123,438 @@ button { font: inherit; color: inherit; }
     } else { reserva(); }
   }
 
+  /* ====================================================================== *
+     GRAVACAO DO ATENDIMENTO — "Finalizar consulta"
+
+     A gravacao e CEGA de proposito: a chave publicada tem permissao de INSERT
+     e nada mais. Ela nao le, nao altera e nao apaga. Isso protege o prontuario
+     de quem abrir o codigo-fonte da pagina — que e publica — mas tem uma
+     consequencia de desenho: o servidor nao pode devolver o id da linha.
+
+     Por isso o PROTOCOLO nasce aqui no navegador (uuid) e viaja junto no
+     INSERT. O recibo que aparece na tela e um numero que o navegador ja
+     conhecia antes de enviar, e nao algo lido de volta.
+
+     Grava-se SEMPRE no navegador primeiro, e so depois tenta-se o servidor:
+     se a rede cair no fim do atendimento, a consulta nao evapora.
+   * ====================================================================== */
+
+  /* VAZIO ate o projeto Supabase existir. Em branco, "Finalizar consulta"
+     grava so neste navegador e DIZ isso com todas as letras — dizer "salva"
+     sem ter salvado e a unica coisa que este botao nao pode fazer.
+     Preencher com a URL do projeto e a chave ANON (nunca a service_role:
+     aquela le tudo, e esta pagina e publica). */
+  var SUPABASE = {
+    url: "https://fsvbauskdlwigtqpldtz.supabase.co",
+    /* Chave PUBLICAVEL (formato novo do Supabase; equivale a anon). Estar aqui
+       em texto claro e o desenho, nao um descuido: a pagina e publica, entao a
+       protecao mora no banco — RLS com politica so de INSERT, em
+       docs/backend/supabase.sql. Se algum dia esta chave for trocada por uma
+       service_role, o prontuario inteiro vaza para quem abrir o codigo-fonte. */
+    anonKey: "sb_publishable_CFV67CAZsL-KPgAshTAABA_knmT2vHr"
+  };
+
+  /* Contrato que a tela precisa em tempo de execucao: para cada chave da tela,
+     a coluna e o tipo no banco. GERADO a partir de docs/campos.yaml — nao
+     edite a mao. scripts/gerar_contrato.py confere e FALHA se divergir. */
+  var CONTRATO_CAMPOS = {
+    "abo": [["grupo_abo","grupo_abo"]], "ageu": [["cond_usg_agendado","date"]],
+    "ano_ult_parto": [["ano_ultimo_parto","integer"]],
+    "ant_anem": [["hist_anemia","estado_clinico"]],
+    "ant_dmg": [["hist_diabetes_gestacional","estado_clinico"]],
+    "ant_dplac": [["hist_descolamento_placenta","estado_clinico"]],
+    "ant_ecla": [["hist_eclampsia","estado_clinico"]],
+    "ant_hellp": [["hist_hellp","estado_clinico"]],
+    "ant_isoi": [["hist_isoimunizacao","estado_clinico"]],
+    "ant_itu": [["hist_itu","estado_clinico"]],
+    "ant_pprev": [["hist_placenta_previa","estado_clinico"]],
+    "ant_pree": [["hist_preeclampsia","estado_clinico"]],
+    "ant_rpm": [["hist_rotura_prematura_membranas","estado_clinico"]],
+    "ant_saf": [["hist_saf","estado_clinico"]],
+    "ant_sifi": [["hist_sifilis","estado_clinico"]],
+    "ant_tff": [["hist_transfusao_feto_fetal","estado_clinico"]],
+    "ant_tpp": [["hist_trabalho_parto_pretermo","estado_clinico"]],
+    "atu_anem": [["atual_anemia","estado_clinico"]],
+    "atu_dmg": [["atual_diabetes_gestacional","estado_clinico"]],
+    "atu_dplac": [["atual_descolamento_placenta","estado_clinico"]],
+    "atu_ecla": [["atual_eclampsia","estado_clinico"]],
+    "atu_hellp": [["atual_hellp","estado_clinico"]],
+    "atu_isoi": [["atual_isoimunizacao","estado_clinico"]],
+    "atu_itu": [["atual_itu","estado_clinico"]],
+    "atu_pprev": [["atual_placenta_previa","estado_clinico"]],
+    "atu_pree": [["atual_preeclampsia","estado_clinico"]],
+    "atu_rpm": [["atual_rotura_prematura_membranas","estado_clinico"]],
+    "atu_saf": [["atual_saf","estado_clinico"]],
+    "atu_sifi": [["atual_sifilis","estado_clinico"]],
+    "atu_tff": [["atual_transfusao_feto_fetal","estado_clinico"]],
+    "atu_tpp": [["atual_trabalho_parto_pretermo","estado_clinico"]],
+    "au": [["altura_uterina_cm","numeric"]], "bcf": [["bcf_bpm","integer"]],
+    "cida": [["naturalidade","text"]], "cond_orid": [["cond_orienta_dieta","estado_clinico"]],
+    "cond_orim": [["cond_orienta_mobilograma","estado_clinico"]],
+    "cond_oris": [["cond_orienta_sinais_hipertensao","estado_clinico"]],
+    "cond_ubs": [["cond_manter_ubs","estado_clinico"]],
+    "coombs": [["coombs_indireto","coombs"]], "creat": [["creatinina","numeric"]],
+    "creat_un": [["creatinina_unidade","unidade_creatinina"]],
+    "det_aler": [["pes_alergias_quais","text"]],
+    "det_autoimune": [["pes_autoimune_qual","text"]],
+    "det_canc": [["pes_cancer_quais","text"]], "det_ciru": [["pes_cirurgias_quais","text"]],
+    "dnasc": [["data_nascimento","date"]], "dorp": [["grav_dor_toracica","presenca"]],
+    "droq": [["drogas_quais","text"]], "dum": [["dum","date"]],
+    "eas": [["eas","achado_exame"]], "enca": [["encaminhamento","text"]],
+    "esco": [["escolaridade","escolaridade"]], "estatura": [["estatura_cm","numeric"]],
+    "estc": [["estado_civil","estado_civil"]], "ex_afebr": [["ex_afebril","achado_exame"]],
+    "ex_buln": [["ex_bulhas","achado_exame"]], "ex_espe": [["ex_especular","achado_exame"]],
+    "ex_eupne": [["grav_dispneia","presenca"]], "ex_hidra": [["ex_hidratada","achado_exame"]],
+    "ex_mams": [["ex_mamas","achado_exame"]],
+    "ex_mmii": [["ex_membros_inferiores","achado_exame"]],
+    "ex_murv": [["ex_murmurio_vesicular","achado_exame"]],
+    "ex_orien": [["ex_orientada","achado_exame"]],
+    "ex_ritm": [["ex_ritmo_cardiaco","achado_exame"]],
+    "ex_ruid": [["ex_ruidos_adventicios","achado_exame"]],
+    "ex_sopr": [["ex_sopros","achado_exame"]], "ex_tire": [["ex_tireoide","achado_exame"]],
+    "ex_vigil": [["ex_vigil","achado_exame"]], "exdet_mams": [["ex_mamas_alteracoes","text"]],
+    "exobs": [["ex_observacoes","text"]], "fam_diab": [["fam_diabetes","estado_clinico"]],
+    "fam_ecla": [["fam_eclampsia","estado_clinico"]],
+    "fam_gemel": [["fam_gestacao_gemelar","estado_clinico"]],
+    "fam_hipe": [["fam_hipertensao_cronica","estado_clinico"]],
+    "fam_malf": [["fam_malformacoes","estado_clinico"]],
+    "fam_pree": [["fam_preeclampsia","estado_clinico"]],
+    "fam_tube": [["fam_tuberculose","estado_clinico"]],
+    "gest_ant": [["teve_gestacao_anterior","estado_clinico"]],
+    "gest_multipla": [["gestacao_multipla","estado_clinico"]],
+    "gl_jeju_a": [["glic_jejum_alteradas","integer"]],
+    "gl_jeju_t": [["glic_jejum_total","integer"]],
+    "gl_palm_a": [["glic_pos_almoco_alteradas","integer"]],
+    "gl_palm_t": [["glic_pos_almoco_total","integer"]],
+    "gl_pcaf_a": [["glic_pos_cafe_alteradas","integer"]],
+    "gl_pcaf_t": [["glic_pos_cafe_total","integer"]],
+    "gl_pjan_a": [["glic_pos_jantar_alteradas","integer"]],
+    "gl_pjan_t": [["glic_pos_jantar_total","integer"]],
+    "gl_tempo": [["glic_tempo_pos_prandial","text"]], "glic": [["glicose","numeric"]],
+    "hab_alco": [["alcool","uso_substancia"]], "hab_drog": [["drogas","uso_substancia"]],
+    "hab_fumo": [["fumo","uso_substancia"]], "hab_obs": [["habitos_observacoes","text"]],
+    "hb": [["hemoglobina","numeric"]], "ist_herg": [["ist_herpes_genital","estado_clinico"]],
+    "ist_mae": [["ist_outra","estado_clinico"]], "ist_outras": [["ist_outra_quais","text"]],
+    "ist_verg": [["ist_verruga_genital","estado_clinico"]],
+    "leuc": [["leucocitos","numeric"]], "medq": [["medicamentos_quais","text"]],
+    "medu": [["medicamentos_em_uso","estado_clinico"]],
+    "movf": [["movimentacao_fetal","mov_fetal"]], "na": [["num_abortos","integer"]],
+    "ng": [["num_gestacoes","integer"]], "nome": [["nome","text"]],
+    "np": [["num_partos","integer"]], "obse": [["hemograma_observacoes","text"]],
+    "out2": [["fam_observacoes","text"]], "out3": [["hist_observacoes","text"]],
+    "out4": [["gestacao_observacoes","text"]], "out5": [["vac_outras","text"]],
+    "outo": [["cond_observacoes","text"]], "outr": [["pes_observacoes","text"]],
+    "pdias": [["pa_diastolica","integer"]], "pes_aler": [["pes_alergias","estado_clinico"]],
+    "pes_autoimune": [["pes_autoimune","estado_clinico"]],
+    "pes_canc": [["pes_cancer","estado_clinico"]],
+    "pes_ciru": [["pes_cirurgias","estado_clinico"]],
+    "pes_diab": [["pes_diabetes","estado_clinico"]],
+    "pes_epil": [["pes_epilepsia","estado_clinico"]],
+    "pes_hipe": [["pes_hipertensao","estado_clinico"]],
+    "pes_infe": [["pes_infertilidade","estado_clinico"]],
+    "pes_renal": [["pes_doenca_renal","estado_clinico"]],
+    "pes_tran": [["pes_transfusao","estado_clinico"]],
+    "pes_tube": [["pes_tuberculose","estado_clinico"]], "peso": [["peso_kg","numeric"]],
+    "plan": [["cond_planos","text"]], "plaq": [["plaquetas","numeric"]],
+    "prontuario": [["prontuario","text"]], "psist": [["pa_sistolica","integer"]],
+    "quea": [["queixas_atuais","text"]], "retorno": [["cond_retorno_semanas","integer"]],
+    "rh": [["fator_rh","fator_rh"]], "solq": [["cond_exames_quais","text"]],
+    "solr": [["cond_solicita_exames","estado_clinico"]],
+    "soro_cmv": [["soro_cmv_igg","sorologia_par"],["soro_cmv_igm","sorologia_par"]],
+    "soro_hepb": [["soro_anti_hbs","sorologia_par"],["soro_hbsag","sorologia_par"]],
+    "soro_hepc": [["soro_anti_hcv","sorologia"]], "soro_hiv": [["soro_hiv","sorologia"]],
+    "soro_htlv": [["soro_htlv","sorologia"]],
+    "soro_toxo": [["soro_toxo_igg","sorologia_par"],["soro_toxo_igm","sorologia_par"]],
+    "soro_vdrl": [["soro_vdrl","sorologia"]],
+    "sorodet_vdrl": [["soro_vdrl_titulacao","text"]], "spo2": [["spo2","numeric"]],
+    "t4l": [["t4_livre","numeric"]], "tele": [["telefone","text"]],
+    "tgo": [["tgo","numeric"]], "totg1": [["totg_medida1","numeric"]],
+    "totg2": [["totg_medida2h","numeric"]], "tsh": [["tsh","numeric"]],
+    "ulcg": [["lesao_ulcera_genital","estado_clinico"]],
+    "ult2": [["usg_morfologica_2tri","text"]], "ultm": [["usg_morfologica_1tri","text"]],
+    "ulto": [["usg_obstetrica","text"]], "uroc": [["urocultura","achado_exame"]],
+    "uroq": [["urocultura_microrganismo","text"]],
+    "vac_covi": [["vac_covid","status_vacina"]], "vac_dt": [["vac_dt","status_vacina"]],
+    "vac_dtpa": [["vac_dtpa","status_vacina"]],
+    "vac_infl": [["vac_influenza","status_vacina"]],
+    "vac_vhepb": [["vac_hepatite_b","status_vacina"]],
+    "vac_vsr": [["vac_vsr","status_vacina"]], "zonr": [["zona_residencia","zona_residencia"]]
+  };
+
+  var CONTRATO_DOMINIOS = {
+    "achado_exame": ["normal","alterado"], "coombs": ["negativo","positivo","sem_resultado"],
+    "escolaridade": ["sem_escolaridade","fundamental_incompleto","fundamental_completo","medio_incompleto","medio_completo","superior_incompleto","superior_completo","pos_graduacao","nao_informado"],
+    "estado_civil": ["casada","solteira","viuva","divorciada","uniao_estavel"],
+    "estado_clinico": ["sim","nao","nao_sabe"],
+    "fator_rh": ["negativo","positivo","nao_realizado"],
+    "grupo_abo": ["a","b","ab","o","nao_realizada"],
+    "mov_fetal": ["presente","ausente","nao_avaliavel"], "origem_ig": ["dum","informada"],
+    "presenca": ["ausente","presente"],
+    "sorologia": ["nao_reagente","reagente","sem_resultado"],
+    "sorologia_par": ["suscetivel","imune","infeccao_ativa","possivel_infeccao_aguda","indeterminado","sem_resultado"],
+    "status_vacina": ["nao_vacinada","vacinada","sem_data","nao_informado"],
+    "unidade_creatinina": ["mg_dl","umol_l"], "uso_substancia": ["nunca","parou","atual"],
+    "zona_residencia": ["urbana","rural"]
+  };
+
+  // Estado de interface que nao e dado clinico e por isso nao tem coluna.
+  var NAO_E_DADO = ["forcar_obst", "ig_informada"];
+
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) { return crypto.randomUUID(); }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0;
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  /* Rotulo de tela -> valor de dominio: minusculas, sem acento, resto vira
+     sublinhado ("Uniao estavel" -> uniao_estavel).
+
+     Os apelidos sao POR DOMINIO, nao globais, porque o mesmo texto significa
+     coisas diferentes conforme a pergunta: "nao" e `nao` em estado_clinico,
+     `ausente` em presenca e `negativo` em coombs. Uma tabela global colocaria
+     o valor errado na coluna certa, que e o pior tipo de erro aqui \u2014 passa na
+     validacao e mente no prontuario.
+
+     A lista saiu de auditoria, nao de palpite: percorrendo os 10 blocos e
+     testando TODO valor que cada controle consegue gravar contra o dominio
+     da sua coluna. Ao acrescentar controle novo, refaca a auditoria. */
+  var APELIDOS = {
+    presenca:           { nao: "ausente", normal: "ausente",
+                          sim: "presente", alterado: "presente" },
+    mov_fetal:          { normal: "presente", alterado: "ausente", naval: "nao_avaliavel" },
+    coombs:             { nao: "negativo", sim: "positivo" },
+    fator_rh:           { neg: "negativo", pos: "positivo" },
+    /* "Imune (vacinal)" e a UNICA forma de imune que a tela oferece para a
+       hepatite B; o parenteses nomeia o mecanismo, nao um estado diferente.
+       Mapear para `imune` nao perde nada que a tela tenha coletado. */
+    sorologia_par:      { imune_vacinal: "imune" },
+    estado_clinico:     { nsabe: "nao_sabe" },
+    unidade_creatinina: { mgdl: "mg_dl", umoll: "umol_l" },
+    zona_residencia:    { area_rural: "rural" }
+  };
+  function paraDominio(tipo, v) {
+    var s = String(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    var a = APELIDOS[tipo];
+    return (a && a[s]) || s;
+  }
+
+  /* Monta a linha do banco a partir do estado da tela.
+
+     Nao envia o que nao souber converter. Valor que nao cai no dominio vira
+     PROBLEMA e interrompe a gravacao, em vez de seguir e deixar o Postgres
+     recusar a linha inteira no fim do atendimento — que e o pior momento
+     possivel para descobrir que nada foi gravado.
+
+     Chave preenchida que nao tem coluna nao e engolida em silencio: sai na
+     lista `semColuna` e aparece no popup. Hoje isso pega o edema e as datas de
+     vacina, que a tela coleta e o contrato ainda nao tem onde guardar. */
+  function montarRegistro(protocolo) {
+    var linha = {}, problemas = [], semColuna = [];
+    Object.keys(dados).forEach(function (k) {
+      if (NAO_E_DADO.indexOf(k) >= 0) { return; }
+      var c = CONTRATO_CAMPOS[k];
+      var v = dados[k];
+      if (v === "" || v === null || v === undefined) { return; }
+      if (!c) { semColuna.push(k); return; }
+      var tipo = c[0][1], valor;
+      if (CONTRATO_DOMINIOS[tipo]) {
+        var d = paraDominio(tipo, v);
+        if (CONTRATO_DOMINIOS[tipo].indexOf(d) < 0) {
+          /* "N\u00e3o sabe" e a resposta que mais cai aqui, e nao por descuido: em
+             coombs, fator_rh e grupo_abo o dominio so tem NULL para ela, e
+             NULL ja significa "nao perguntei". Colapsar as duas e exatamente
+             o que a pendencia 6 esta em aberto para decidir \u2014 entao o campo
+             nao e gravado, e o popup diz isso. */
+          problemas.push(d === "nsabe"
+            ? k + ": \u201cN\u00e3o sabe\u201d ainda n\u00e3o tem valor em " + tipo + " (pend\u00eancia 6)"
+            : k + ": \u201c" + v + "\u201d n\u00e3o \u00e9 valor de " + tipo);
+          return;
+        }
+        valor = d;
+      } else if (tipo === "integer") {
+        valor = parseInt(String(v).replace(",", "."), 10);
+        if (isNaN(valor)) { problemas.push(k + ": \u201c" + v + "\u201d nao e inteiro"); return; }
+      } else if (tipo === "numeric") {
+        valor = parseFloat(String(v).replace(",", "."));
+        if (isNaN(valor)) { problemas.push(k + ": \u201c" + v + "\u201d nao e numero"); return; }
+      } else if (tipo === "boolean") {
+        valor = (v === true || v === "sim" || v === "1");
+      } else {
+        valor = String(v);
+      }
+      /* Uma chave pode alimentar MAIS DE UMA coluna. Os pares de sorologia
+         (HBsAg/anti-HBs, toxo IgG/IgM, CMV IgG/IgM) sao uma pergunta so na
+         tela e dois codigos na planilha \u2014 553 e 554, 556 e 557, 558 e 559 \u2014,
+         e o registro marca isso com "fundido com". O resultado interpretado
+         vai para as duas colunas: apagar uma perderia o codigo da planilha,
+         que e o que liga esta tela ao instrumento da medica. */
+      c.forEach(function (par) { linha[par[0]] = valor; });
+    });
+
+    /* Derivados: existem como coluna e nao como campo de tela. Cada um so
+       entra se puder ser calculado — ausencia nunca vira zero (D-06). */
+    var z = insumosPiers(), dpp = calcDPP(), igInf = get("ig_informada");
+    linha.protocolo = protocolo;
+    linha.data_consulta = new Date().toISOString().slice(0, 10);
+    var idn = idadeDe(get("dnasc"));
+    if (idn !== null) { linha.idade = idn; }
+    if (dpp) { linha.data_provavel_parto = dpp; }
+    if (z.igSem !== null) {
+      linha.ig_semanas = Math.floor(z.igSem);
+      linha.ig_dias = Math.round((z.igSem - Math.floor(z.igSem)) * 7);
+      linha.ig_origem = igInf ? "informada" : "dum";
+    }
+    var pe = parseFloat(String(get("peso") || "").replace(",", "."));
+    var es = parseFloat(String(get("estatura") || "").replace(",", "."));
+    if (!isNaN(pe) && !isNaN(es) && es > 0) {
+      linha.imc = Math.round(pe / Math.pow(es / 100, 2) * 10) / 10;
+    }
+    // So declara imputacao quando o escore de fato rodou com o valor assumido.
+    if (z.pode) { linha.spo2_imputada = !!z.spo2Imputada; }
+    return { linha: linha, problemas: problemas, semColuna: semColuna };
+  }
+
+  function gravarLocal(linha) {
+    try {
+      var k = "pnar:atendimentos";
+      var l = JSON.parse(localStorage.getItem(k) || "[]");
+      l.push(linha);
+      localStorage.setItem(k, JSON.stringify(l));
+      return { ok: true, total: l.length };
+    } catch (e) { return { ok: false, erro: String(e) }; }
+  }
+
+  /* Teto de espera. Sem ele, uma rede ruim deixa o botao mudo por dezenas de
+     segundos — medido: com o servidor inalcancavel o navegador repete a
+     conexao por ~10 s antes de desistir. Quem esta atendendo conclui que o
+     clique nao pegou e clica de novo. */
+  var ESPERA_SERVIDOR_MS = 12000;
+
+  function enviarServidor(linha) {
+    var corrida = fetch(SUPABASE.url.replace(/\/$/, "") + "/rest/v1/pnar_primeira_consulta", {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE.anonKey,
+        Authorization: "Bearer " + SUPABASE.anonKey,
+        "Content-Type": "application/json",
+        /* OBRIGATORIO com chave que so insere: o padrao do PostgREST e
+           devolver a linha gravada, e devolver exige SELECT. Sem isto o
+           INSERT inteiro falha por falta de permissao de LEITURA. */
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(linha)
+    }).then(function (r) {
+      if (r.ok) { return { ok: true }; }
+      return r.text().then(function (t) {
+        return { ok: false, erro: "HTTP " + r.status + " \u00b7 " + t.slice(0, 400) };
+      });
+    }, function (e) {
+      return { ok: false, erro: "rede: " + (e && e.message ? e.message : e) };
+    });
+    /* O INSERT pode ter chegado mesmo depois do teto — por isso o texto do
+       tempo esgotado diz "não deu resposta", e não "não gravou". Afirmar que
+       nao gravou seria tao ruim quanto afirmar que gravou. */
+    var estouro = new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve({ ok: false, erro: "o servidor não deu resposta em " +
+          (ESPERA_SERVIDOR_MS / 1000) + " s (o envio pode ter chegado assim mesmo)" });
+      }, ESPERA_SERVIDOR_MS);
+    });
+    return Promise.race([corrida, estouro]);
+  }
+
+  /* Desenha o popup de confirmacao. Recebe o estado real da gravacao e nunca
+     o enfeita: sem servidor configurado, o titulo NAO diz "salva no sistema".
+     "Exportar atendimento" fica disponivel nos tres desfechos — inclusive no
+     de falha, que e justamente quando nao se pode perder o texto. */
+  function mostrarSalvo(e) {
+    var cor = e.pendente ? "medio" : (e.ok ? (e.onde === "servidor" ? "bom" : "medio") : "ruim");
+    var titulo = e.pendente ? "Gravando…"
+      : (!e.ok ? "Não foi possível gravar"
+        : (e.onde === "servidor" ? "Consulta salva" : "Consulta salva neste navegador"));
+    var topicos = [];
+    /* O popup aparece na hora, antes da resposta do servidor. Botao que fica
+       mudo enquanto a rede pensa e clicado de novo — e cada clique gravaria
+       outro atendimento, que ninguem consegue ver depois, porque a chave nao le. */
+    if (e.pendente) {
+      topicos.push("Já guardada <b>neste navegador</b>. Enviando para o banco…");
+    }
+    if (e.ok && e.onde === "servidor") {
+      topicos.push("Gravada no banco do PNAR e também neste navegador, como cópia.");
+    } else if (e.ok) {
+      topicos.push("Gravada <b>somente neste navegador</b> — o banco ainda não está " +
+        "configurado nesta tela. Sai do ar se o histórico do navegador for limpo.");
+    }
+    if (!e.ok && e.erro) { topicos.push("<b>Motivo:</b> " + esc(e.erro)); }
+    if (e.protocolo) { topicos.push("Protocolo <code>" + esc(e.protocolo) + "</code>"); }
+    if (e.quem) { topicos.push("Paciente: <b>" + esc(e.quem) + "</b>"); }
+    if (e.campos !== undefined) { topicos.push(e.campos + " campo(s) gravado(s)."); }
+    /* Campo preenchido sem coluna no contrato NAO some calado. Hoje isto pega
+       o edema e as datas de vacina — a tela coleta, o contrato ainda nao tem
+       onde guardar, e quem atendeu precisa saber disso antes de fechar. */
+    if (e.semColuna && e.semColuna.length) {
+      topicos.push("<b>Não foi gravado</b> (sem coluna no contrato): " +
+        esc(e.semColuna.join(", ")) + ". Está no texto da exportação.");
+    }
+    if (e.problemas && e.problemas.length) {
+      topicos.push("<b>Não foi gravado</b> (o contrato não tem valor para a resposta): " +
+        esc(e.problemas.join(" · ")) + ". Está no texto da exportação.");
+    }
+    document.getElementById("salvo-titulo").textContent = titulo;
+    document.getElementById("salvo-corpo").innerHTML =
+      '<div class="cartao-calc cartao-calc--' + cor + '" style="margin-top:0">' +
+      '<ul class="cartao-calc__notas" style="margin-top:0"><li>' +
+      topicos.join("</li><li>") + "</li></ul></div>";
+    document.getElementById("modal-salvo").style.display = "flex";
+  }
+
+  /* Trava contra clique duplo. Sem ela, dois cliques gravam dois atendimentos
+     com protocolos diferentes — e a duplicata e invisivel, porque a chave
+     publica nao le de volta. */
+  var enviando = false;
+
+  function finalizarConsulta() {
+    if (enviando) { return; }
+    var protocolo = uuid();
+    var m = montarRegistro(protocolo);
+    var idn = idadeDe(get("dnasc"));
+    var quem = [get("nome"), get("prontuario") ? "prontuário " + get("prontuario") : "",
+      idn === null ? "" : idn + " anos"].filter(function (x) { return x; }).join(" · ");
+    var base = {
+      protocolo: protocolo, quem: quem,
+      campos: Object.keys(m.linha).length,
+      semColuna: m.semColuna, problemas: m.problemas
+    };
+    /* Campo que a tela nao soube converter NAO cancela a gravacao. Cancelar
+       perderia o atendimento inteiro por causa de um "Não sabe" num tipo
+       sanguineo — e o registro oficial e a evolucao do AGHU, que sai completa
+       na exportacao. O campo fica de fora, e o popup nomeia qual e por que. */
+    var local = gravarLocal(m.linha);
+    if (!SUPABASE.url || !SUPABASE.anonKey) {
+      mostrarSalvo(Object.assign({}, base, {
+        ok: local.ok, onde: "navegador", erro: local.erro
+      }));
+      return;
+    }
+    // Confirmacao na hora, com o que ja e verdade: gravada no navegador.
+    enviando = true;
+    var botao = document.getElementById("finalizar");
+    if (botao) { botao.disabled = true; }
+    mostrarSalvo(Object.assign({}, base, { pendente: true, ok: local.ok, onde: "navegador" }));
+
+    enviarServidor(m.linha).then(function (r) {
+      enviando = false;
+      if (botao) { botao.disabled = false; }
+      mostrarSalvo(Object.assign({}, base, {
+        ok: r.ok, onde: r.ok ? "servidor" : "navegador",
+        erro: r.ok ? null : r.erro + (local.ok ? " — a consulta ficou guardada neste navegador." : "")
+      }));
+    });
+  }
+
   /* ---- eventos ----------------------------------------------------------- */
   document.addEventListener("click", function (ev) {
     var t = ev.target.closest("button");
@@ -2175,49 +2585,28 @@ button { font: inherit; color: inherit; }
     }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
     if (t.id === "abrir") { document.getElementById("modal").style.display = "flex"; return; }
-    /* "ajustar" abre a digitacao de DPP ou IG; "voltar ao cálculo" desfaz e
-       devolve o campo a derivacao pela DUM. Um ajuste por vez: abrir um fecha
-       o outro, porque dois ajustes simultaneos poderiam se contradizer.
-       O campo abre JA PREENCHIDO com o valor calculado -- corrigir dois dias
-       nao deveria custar redigitar tudo -- e o selo passa a "informada" na
-       hora, dizendo que aquele numero agora esta sob controle manual. */
-    if (t.dataset.datacao) {
-      var alvo = t.dataset.alvo;
-      if (t.dataset.datacao === "ajustar") {
-        var d = datacao();
-        if (alvo === "ig") {
-          set("ig_sem", d.ig ? String(d.ig.sem) : "");
-          set("ig_dias", d.ig ? String(d.ig.dias) : "");
-          set("dpp_informada", null);
-          set("datacao_ajuste", "ig");
-          ancorarPorIG();
-        } else {
-          set("dpp_informada", d.dpp || "");
-          set("ig_sem", null); set("ig_dias", null);
-          set("datacao_ajuste", "dpp");
-          ancorarPorDPP();
-        }
-      } else {
-        // desfazer e explicito e apaga so o ajuste; a DUM nao e tocada
-        set("datacao_ajuste", null);
-        set("datacao_ancora_data", null);
-        set("ig_sem", null); set("ig_dias", null);
-        set("dpp_informada", null);
-      }
-      render();
-      var foco = document.getElementById(alvo === "ig" ? "ig-sem" : "dpp-campo");
-      if (foco && !foco.readOnly) { foco.focus(); try { foco.select(); } catch (e) { /* date */ } }
-      return;
-    }
     if (t.id === "fechar") { tentarFechar(); return; }
-    if (t.id === "exportar") { abrirExportacao(); return; }
+    if (t.id === "finalizar") { finalizarConsulta(); return; }
+    // Exportar so existe dentro da confirmacao, depois que ha protocolo.
+    if (t.id === "salvo-exportar") { abrirExportacao(); return; }
+    if (t.id === "salvo-fechar" || t.id === "salvo-fechar-x") {
+      document.getElementById("modal-salvo").style.display = "none"; return;
+    }
     if (t.id === "export-fechar" || t.id === "export-fechar-x") {
       document.getElementById("modal-export").style.display = "none"; return;
     }
     if (t.id === "export-copiar") { copiarExportacao(t); return; }
+    /* Este botao anunciava "Rascunho salvo" e nao salvava nada — so contava
+       campos. Agora grava de verdade, no navegador, e o texto diz onde. */
     if (t.id === "rascunho") {
       var n = Object.keys(dados).length;
-      alert("Rascunho salvo com " + n + " campo(s) preenchido(s).");
+      try {
+        localStorage.setItem("pnar:rascunho", JSON.stringify(dados));
+        alert("Rascunho guardado neste navegador com " + n + " campo(s).\n\n" +
+          "Não é a gravação do atendimento: para isso, use “Finalizar consulta”.");
+      } catch (e) {
+        alert("Não foi possível guardar o rascunho neste navegador.\n\n" + e);
+      }
       return;
     }
   });
@@ -2243,101 +2632,26 @@ button { font: inherit; color: inherit; }
     try { el.setSelectionRange(novo, novo); } catch (e) { /* sem selecao */ }
   }
 
-  /* Atualiza a datacao SEM trocar o HTML do painel: valores derivados, selos
-     e dicas dos tres campos, mais a IG do topo. Existe para que digitar num
-     campo de datacao de retorno imediato nos outros dois sem o campo ativo
-     ser recriado embaixo do dedo de quem digita. Regras:
-     - campo EM AJUSTE nunca tem o value reescrito (e o que a pessoa digitou);
-     - campo com FOCO nunca tem o value reescrito;
-     - selo diz o que esta na tela: derivado (por DUM / por IG / por DPP) ou
-       informado; a dica carrega a regra, o que falta, ou o cálculo pela DUM
-       que o ajuste deixou de lado -- a alternativa nunca some. */
-  var ROTULO_ORIGEM = { dum: "por DUM", ig: "por IG", dpp: "por DPP" };
-  function atualizarDatacao() {
-    var d = datacao();
+  /* Campo de data redesenha aqui, nao em "input": "change" so dispara com a
+     data completa, entao o foco nunca e roubado no meio da digitacao. */
+  /* Atualiza so o que DERIVA da DUM, sem trocar o HTML do painel. Existe para
+     que o campo de data possa dar retorno imediato sem ser recriado embaixo do
+     dedo de quem digita. */
+  function atualizarDerivados() {
+    var ig = calcIG(), dpp = calcDPP(), igInf = get("ig_informada");
     var topo = document.getElementById("topo-ig");
-    if (topo) { topo.textContent = fmtIG(d.ig) || "—"; }
-
-    function selo(id, texto, alerta) {
-      var el = document.getElementById(id);
-      if (!el) { return; }
-      el.textContent = texto || "";
-      el.className = texto ? (alerta ? "selo-alerta" : "selo-derivado") : "";
-    }
-    function dica(id, texto) {
-      var el = document.getElementById(id);
-      if (el) { el.textContent = texto || ""; }
-    }
-    function marcarDerivado(idCampo, derivado) {
-      var el = document.getElementById(idCampo);
-      if (el) { el.classList.toggle("campo--derivado", !!derivado); }
-    }
-    function escrever(el, v) {
-      if (el && document.activeElement !== el) { el.value = v; }
-    }
-    // texto do calculo pela DUM, para o ajuste nunca apagar a alternativa
-    function pelaDum(qual) {
-      if (!d.porDum) { return ""; }
-      var v = qual === "dpp" ? fmtData(d.porDum.dpp) : fmtIG(d.porDum.ig);
-      var dif = d.difDias ? " — " + Math.abs(d.difDias) + " d de diferença" : "";
-      return "pela DUM: " + v + dif;
-    }
-
-    // DUM: campo de anamnese. O calculo nunca escreve nela; quando a datacao
-    // vem de um ajuste e a DUM esta vazia, a equivalente aparece so como dica.
-    if (d.temDum) {
-      dica("dica-dum", d.dumImplausivel ? "data fora do plausível (0 a 45 semanas)" : "relato da paciente");
-    } else {
-      dica("dica-dum", d.dumEq
-        ? "compatível com DUM ≈ " + fmtData(d.dumEq) + " (calculada — não gravada)"
-        : "relato da paciente");
-    }
-
-    /* Os campos exibem SEMPRE o valor derivado da datacao vigente -- inclusive
-       durante um ajuste, onde ele coincide com o que foi digitado no dia em
-       que se digitou. E o que faz a IG envelhecer sozinha quando o formulario
-       e reaberto depois: o ajuste guarda o dia zero, nao a idade. O que
-       distingue ajustado de derivado e o selo, a borda e o botao -- nunca o
-       valor. Ajuste aberto e ainda sem numero valido mostra campo vazio, em
-       vez de reexibir o calculo pela DUM que a pessoa esta corrigindo. */
-    var abertoVazio = { dpp: d.ajuste === "dpp" && !d.temAjuste,
-                        ig: d.ajuste === "ig" && !d.temAjuste };
-
-    var elDpp = document.getElementById("dpp-campo");
-    if (elDpp) {
-      escrever(elDpp, abertoVazio.dpp ? "" : (d.dpp || ""));
-      if (d.ajuste === "dpp") {
-        selo("selo-dpp", "informada", true);
-        marcarDerivado("campo-dpp", false);
-        dica("dica-dpp", d.temAjuste ? (pelaDum("dpp") || "corrigida por ultrassonografia")
-             : "informe a data corrigida");
-      } else {
-        selo("selo-dpp", d.dpp ? ROTULO_ORIGEM[d.origem] : "", false);
-        marcarDerivado("campo-dpp", !!d.dpp);
-        dica("dica-dpp", d.origem === "dum" ? "regra de Naegele: DUM + 280 dias"
-             : d.dpp ? pelaDum("dpp") : "informe a DUM ou ajuste");
-      }
-    }
-
-    // IG: semanas e dias em caixas separadas, sempre
-    var elSem = document.getElementById("ig-sem"), elDias = document.getElementById("ig-dias");
-    if (elSem) {
-      escrever(elSem, abertoVazio.ig || !d.ig ? "" : String(d.ig.sem));
-      escrever(elDias, abertoVazio.ig || !d.ig ? "" : String(d.ig.dias));
-      if (d.ajuste === "ig") {
-        var dig = igDigitada();
-        selo("selo-ig", "informada", true);
-        marcarDerivado("campo-ig", false);
-        dica("dica-ig", !dig ? (get("ig_sem") ? "valor fora do plausível (até 45s, 0 a 6 d)" : "informe as semanas")
-             : dig.diasAusente ? "dias não informado — o cálculo usa 0, e nada é gravado no campo"
-             : (pelaDum("ig") || "corrigida por ultrassonografia"));
-      } else {
-        selo("selo-ig", d.ig ? ROTULO_ORIGEM[d.origem] : "", false);
-        marcarDerivado("campo-ig", !!d.ig);
-        dica("dica-ig", d.origem === "dum" ? "calculada a partir da DUM"
-             : d.ig ? pelaDum("ig") : "informe a DUM ou ajuste");
-      }
-    }
+    if (topo) { topo.textContent = igInf || (ig ? ig.sem + "s " + ig.dias + "d" : "—"); }
+    var alvoDpp = painel.querySelector('[data-derivado="dpp"]');
+    if (alvoDpp) { alvoDpp.value = dpp ? fmtData(dpp) : ""; }
+    var alvoIg = document.getElementById("ig-campo");
+    if (alvoIg && !igInf) { alvoIg.value = ig ? ig.sem + "s " + ig.dias + "d" : ""; }
+    /* A idade segue a mesma regra do DPP: derivada de um campo de data, entao
+       atualiza aqui e nunca no "input", que roubaria o cursor do seletor. */
+    var idNasc = idadeDe(get("dnasc"));
+    var alvoIdade = painel.querySelector('[data-derivado="idade"]');
+    if (alvoIdade) { alvoIdade.value = idNasc === null ? "" : idNasc + " anos"; }
+    var topoIdade = document.getElementById("topo-idade");
+    if (topoIdade) { topoIdade.textContent = idNasc === null ? "—" : idNasc + " anos"; }
   }
 
   /* CAMPO DE DATA: nunca redesenhar enquanto ele tem o foco.
@@ -2351,8 +2665,7 @@ button { font: inherit; color: inherit; }
     var el = ev.target;
     if (el.dataset && el.dataset.k && el.type === "date") {
       set(el.dataset.k, el.value);
-      if (el.dataset.k === "dpp_informada") { ancorarPorDPP(); }
-      atualizarDatacao();
+      atualizarDerivados();
     }
   });
 
@@ -2364,13 +2677,9 @@ button { font: inherit; color: inherit; }
      blur nao borbulha: precisa de captura. */
   document.addEventListener("blur", function (ev) {
     var el = ev.target;
-    // DPP e IG derivadas trazem o value do calculo; grava-lo no blur as
-    // transformaria em "informada" sem ninguem ter digitado. So input/change
-    // gravam, porque so disparam em acao real de quem preenche.
-    if (el.id === "dpp-campo" || el.dataset.igp) { atualizarDatacao(); return; }
     if (el.dataset && el.dataset.k && el.type === "date") {
       set(el.dataset.k, el.value);
-      atualizarDatacao();
+      atualizarDerivados();
     }
   }, true);
 
@@ -2380,13 +2689,11 @@ button { font: inherit; color: inherit; }
     // campos que mudam o que a tela mostra (derivados, avisos, blocos condicionais)
     // "creat" entra por causa do aviso de unidade: digitar valor sem unidade
     // escolhida mostra o alerta na hora, nao so na proxima troca de bloco.
-    var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2", "ano_ult_parto", "creat"];
+    // "nome" entra porque o cabecalho o espelha: digitar e ver o nome mudar la
+    // em cima e o que confirma que o atendimento vai ser gravado na paciente certa.
+    var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2", "ano_ult_parto", "creat", "nome"];
     if (el.dataset.k) {
       set(el.dataset.k, el.value);
-      // datacao: os outros campos reagem no lugar, sem render() -- que
-      // roubaria o foco (ver abaixo)
-      if (el.dataset.k === "dum") { atualizarDatacao(); return; }
-      if (el.dataset.k === "dpp_informada") { ancorarPorDPP(); atualizarDatacao(); return; }
       // NAO redesenha em "input" de campo de data. O navegador PROIBE ler
       // selectionStart em type="date", entao o render() nao tem posicao para
       // restaurar: ele foca o campo e o cursor volta para o PRIMEIRO segmento.
@@ -2399,15 +2706,7 @@ button { font: inherit; color: inherit; }
     if (el.dataset.gl) { set("gl_" + el.dataset.gl, el.value); render(); return; }
     if (el.dataset.vacdata) { set("vacd_" + el.dataset.vacdata, el.value); return; }
     if (el.hasAttribute("data-ret-livre")) { set("retorno", el.value); return; }
-    /* IG: semanas e dias sao campos independentes. Cada tecla reancora, para
-       a DPP acompanhar na hora sem redesenhar o campo sob o dedo. */
-    if (el.dataset.igp) {
-      el.value = el.value.replace(/[^0-9]/g, "");
-      set(el.dataset.igp === "sem" ? "ig_sem" : "ig_dias", el.value);
-      ancorarPorIG();
-      atualizarDatacao();
-      return;
-    }
+    if (el.id === "ig-campo") { set("ig_informada", el.value); return; }
   });
 
   /* Fechar por ESC ou por clique no fundo apagaria ate 157 campos digitados.
@@ -2427,13 +2726,19 @@ button { font: inherit; color: inherit; }
       // texto e regeneravel; os DADOS continuam no formulario atras dele.
       var exp = document.getElementById("modal-export");
       if (exp.style.display !== "none") { exp.style.display = "none"; return; }
+      // Depois dele, a confirmacao. Fecha-la nao desfaz a gravacao — o
+      // atendimento ja esta gravado quando este popup existe.
+      var slv = document.getElementById("modal-salvo");
+      if (slv.style.display !== "none") { slv.style.display = "none"; return; }
       tentarFechar();
     }
   });
 
-  // Clique no fundo tambem fecha so o popup de exportacao (nada se perde).
-  document.getElementById("modal-export").addEventListener("click", function (ev) {
-    if (ev.target === this) { this.style.display = "none"; }
+  // Clique no fundo tambem fecha so os popups (nada se perde em nenhum deles).
+  ["modal-export", "modal-salvo"].forEach(function (id) {
+    document.getElementById(id).addEventListener("click", function (ev) {
+      if (ev.target === this) { this.style.display = "none"; }
+    });
   });
 
   render();
