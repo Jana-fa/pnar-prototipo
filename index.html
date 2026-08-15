@@ -685,7 +685,9 @@ button { font: inherit; color: inherit; }
     { id: "ident", nome: "Identificação" }, { id: "antec", nome: "Antecedentes" },
     { id: "habit", nome: "Hábitos" },
     { id: "exame", nome: "Exame físico" },
-    { id: "labor", nome: "Exames e sorologias" }, { id: "glice", nome: "Controle glicêmico" },
+    { id: "labor", nome: "Exames e sorologias" },
+    { id: "imagem", nome: "Exames de imagem" },
+    { id: "glice", nome: "Controle glicêmico" },
     { id: "vacin", nome: "Vacinas" },
     { id: "gesta", nome: "Gestação atual" },
     { id: "condu", nome: "Condutas" }, { id: "calc", nome: "Calculadoras" }
@@ -1479,6 +1481,299 @@ button { font: inherit; color: inherit; }
     return h;
   };
 
+  /* ====================================================================== *
+     EXAMES DE IMAGEM (D-34)
+
+     Substitui as tres caixas fixas de texto (650/651/652), que nao davam
+     conta do que o alto risco pede: uma gestacao pode ter dezenas de exames,
+     e na vigilancia final um ultrassom a cada dois dias. Aqui cada exame e
+     UMA LINHA numa tabela propria (pnar_exame_imagem) -- linha nao tem teto,
+     campo tem.
+
+     UMA secao para todas as modalidades, e nao uma por tipo de exame: o que
+     se quer ler e a serie da gestacao em ordem de data, e serie quebrada em
+     varias tabelas deixa de ser serie.
+
+     ESTE BLOCO GUARDA O VALOR DO DOMINIO, nao o rotulo. O resto da tela
+     guarda rotulo e converte no fim, por paraDominio(), com apelidos por
+     dominio -- desenho antigo, que funciona mas concentra uma classe de erro
+     inteira (apelido que falta nao quebra nada visivel; o campo so nao e
+     gravado). Como este bloco e novo, nao ha rotulo legado a preservar:
+     option value e data-v carregam "morfologico_1tri", "nao_avaliavel", e
+     paraDominio() os devolve intactos. Um apelido a menos e um erro a menos.
+   * ====================================================================== */
+
+  var MODALIDADES = [
+    { v: "ultrassom_obstetrico", r: "Ultrassom obstétrico" },
+    { v: "ecocardiograma_fetal", r: "Ecocardiograma fetal" },
+    { v: "ultrassom_nao_obstetrico", r: "Ultrassom não obstétrico" },
+    { v: "doppler_venoso_mmii", r: "Doppler venoso de MMII" },
+    { v: "ecocardiograma_materno", r: "Ecocardiograma materno" },
+    { v: "ressonancia_magnetica", r: "Ressonância magnética" },
+    { v: "tomografia", r: "Tomografia" },
+    { v: "radiografia", r: "Radiografia" },
+    { v: "outro", r: "Outro" }
+  ];
+  var FINALIDADES_USG = [
+    { v: "datacao", r: "Datação" },
+    { v: "morfologico_1tri", r: "Morfológico de 1º trimestre" },
+    { v: "morfologico_2tri", r: "Morfológico de 2º trimestre" },
+    { v: "obstetrico_doppler", r: "Obstétrico com Doppler" },
+    { v: "perfil_biofisico", r: "Perfil biofísico fetal" },
+    { v: "outro", r: "Outro" }
+  ];
+  var PLACENTAS = [
+    { v: "normoinserida", r: "Normoinserida" }, { v: "baixa", r: "Baixa" },
+    { v: "previa", r: "Prévia" }, { v: "outro", r: "Outro" }
+  ];
+  var APRESENTACOES = [
+    { v: "cefalica", r: "Cefálica" }, { v: "pelvica", r: "Pélvica" },
+    { v: "cormica", r: "Córmica" }, { v: "nao_avaliavel", r: "Não avaliável" }
+  ];
+  var NORMAL_ALTERADO = [{ v: "normal", r: "Normal" }, { v: "alterado", r: "Alterado" }];
+
+  /* So estas duas modalidades tem feto para medir. Numa radiografia de torax
+     "Doppler de arteria umbilical" nao e inaplicavel -- e INEXISTENTE, que e
+     a excecao da D-18 a regra de nunca esconder (D-14). A pergunta governante
+     ("Exame") fica visivel e respondida acima, e o que ja tiver sido digitado
+     nunca some sozinho: vira orfao com descarte explicito, como em D-16. */
+  var MODALIDADES_OBSTETRICAS = ["ultrassom_obstetrico", "ecocardiograma_fetal"];
+  var CAMPOS_OBSTETRICOS = [
+    "tipo", "ig_semanas", "ig_dias", "peso_fetal_estimado_g", "peso_fetal_percentil",
+    "apresentacao", "liquido_amniotico", "liquido_amniotico_medida_cm",
+    "placenta", "placenta_observacao", "colo_uterino", "colo_uterino_medida_mm",
+    "doppler_uterinas", "doppler_umbilical", "doppler_cerebral_media", "doppler_observacao"
+  ];
+  var DOPPLERS = [
+    { c: "doppler_uterinas", r: "uterinas" },
+    { c: "doppler_umbilical", r: "umbilical" },
+    { c: "doppler_cerebral_media", r: "cerebral média" }
+  ];
+
+  function rotuloDe(lista, v) {
+    for (var i = 0; i < lista.length; i++) { if (lista[i].v === v) { return lista[i].r; } }
+    return v || "";
+  }
+  function ehObstetrico(e) {
+    return !!e && MODALIDADES_OBSTETRICAS.indexOf(e.modalidade) >= 0;
+  }
+  /* Exame sem NENHUM campo e o que sobra de um "Registrar" clicado por engano.
+     Nao vira linha no banco (montarExames) e, pela mesma razao, nao vira
+     paragrafo na exportacao nem entra nas contagens: "exame nao especificado"
+     no meio da evolucao do AGHU e ruido que parece dado faltando. */
+  function exameVazio(e) { return !Object.keys(e).length; }
+  function examesPreenchidos() { return exames.filter(function (e) { return !exameVazio(e); }); }
+  function temObstetricoPreenchido(e) {
+    if (!e) { return false; }
+    return CAMPOS_OBSTETRICOS.some(function (c) { return e[c] !== undefined && e[c] !== ""; });
+  }
+
+  /* ---- estado dos exames -------------------------------------------------
+     FORA de `dados` de proposito: `dados` e o registro plano da consulta (uma
+     linha em pnar_primeira_consulta) e montarRegistro() percorre as suas
+     chaves. Um array la dentro viraria "chave sem coluna" no popup, ou pior,
+     tentaria virar valor de coluna. Tabela diferente, estado diferente.      */
+  var exames = [];
+  var exameEdit = null;   // indice do exame aberto no formulario, ou null
+
+  function exameAtual() { return exameEdit === null ? null : exames[exameEdit]; }
+  function exGet(c) {
+    var e = exameAtual();
+    return e && e[c] !== undefined && e[c] !== null ? e[c] : "";
+  }
+  function exSet(c, v) {
+    var e = exameAtual();
+    if (!e) { return; }
+    if (v === null || v === undefined || v === "") { delete e[c]; } else { e[c] = v; }
+  }
+
+  /* ---- fabricas de campo do exame ---------------------------------------
+     Paralelas as campo*() do resto da tela, mas escrevendo no exame aberto e
+     nao em `dados`. Sem cod(): estes campos nao vem da planilha e nao tem
+     codigo -- inventar um faria a auditoria cruzada do gerador apontar um
+     codigo que nao existe no registro.                                      */
+  function exTexto(c, r, t) {
+    return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + "</label>" +
+      '<input type="text" data-ex="' + c + '" value="' + esc(exGet(c)) + '"></div>';
+  }
+  function exData(c, r, t) {
+    return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + "</label>" +
+      '<input type="date" data-ex="' + c + '" value="' + esc(exGet(c)) + '"></div>';
+  }
+  function exNum(c, r, dica) {
+    return '<div class="campo campo--p"><label>' + esc(r) + "</label>" +
+      '<input type="text" inputmode="decimal" data-num data-ex="' + c + '" value="' + esc(exGet(c)) + '">' +
+      (dica ? '<span class="campo__dica">' + esc(dica) + "</span>" : "") + "</div>";
+  }
+  function exArea(c, r) {
+    return '<div class="campo campo--full"><label>' + esc(r) + "</label>" +
+      '<textarea data-ex="' + c + '">' + esc(exGet(c)) + "</textarea></div>";
+  }
+  function exSel(c, r, ops, t) {
+    var atual = exGet(c);
+    var h = '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + "</label>" +
+      '<select data-ex="' + c + '"><option value="">—</option>';
+    ops.forEach(function (o) {
+      h += '<option value="' + o.v + '"' + (atual === o.v ? " selected" : "") + ">" + esc(o.r) + "</option>";
+    });
+    return h + "</select></div>";
+  }
+  /* Clicar na opcao ja marcada volta para "nao avaliado" -- mesma regra de
+     tri(), porque aqui tambem a ausencia de resposta e uma resposta (D-06). */
+  function exTri(c, r, ops, t) {
+    var atual = exGet(c);
+    var h = '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + "</label>" +
+      '<div><span class="tri" data-ex-tri="' + c + '">';
+    ops.forEach(function (o) {
+      h += '<button type="button" data-v="' + o.v + '"' + (atual === o.v ? ' class="on"' : "") +
+        ' aria-pressed="' + (atual === o.v) + '">' + esc(o.r) + "</button>";
+    });
+    return h + "</span></div></div>";
+  }
+
+  /* Resumo do Doppler para a linha da serie. E COMPRESSAO do que foi
+     registrado, nunca leitura clinica: nomeia quais arterias vieram
+     alteradas, e nao o que isso significa (D-10, D-25).                     */
+  function resumoDoppler(e) {
+    var alt = DOPPLERS.filter(function (d) { return e[d.c] === "alterado"; });
+    if (alt.length) { return "alterado: " + alt.map(function (d) { return d.r; }).join(", "); }
+    if (DOPPLERS.some(function (d) { return e[d.c] === "normal"; })) { return "normal"; }
+    return "—";
+  }
+  function resumoIG(e) {
+    if (e.ig_semanas === undefined || e.ig_semanas === "") { return "—"; }
+    return e.ig_semanas + "s" + (e.ig_dias ? " " + e.ig_dias + "d" : "");
+  }
+  function resumoPeso(e) {
+    var p = [];
+    if (e.peso_fetal_estimado_g) { p.push(e.peso_fetal_estimado_g + " g"); }
+    if (e.peso_fetal_percentil) { p.push(e.peso_fetal_percentil); }
+    return p.length ? p.join(" · ") : "—";
+  }
+
+  /* Ordem de LEITURA e por data; a ordem de GRAVACAO continua sendo a de
+     insercao. Por isso a tabela ordena uma copia dos indices e nunca mexe em
+     `exames` -- reordenar o array trocaria o exame que `exameEdit` aponta
+     debaixo de quem esta editando. */
+  function indicesPorData() {
+    return exames.map(function (_, i) { return i; }).sort(function (a, b) {
+      var da = exames[a].data_exame || "", db = exames[b].data_exame || "";
+      if (da === db) { return a - b; }
+      if (!da) { return 1; }        // sem data vai para o fim, nao para o topo
+      if (!db) { return -1; }
+      return da < db ? -1 : 1;
+    });
+  }
+
+  telas.imagem = function () {
+    var h = '<h2 class="painel__titulo">Exames de imagem</h2>' +
+      '<p class="painel__nota">Um registro por exame, em série, sem limite de quantos por gestação. ' +
+      "Ultrassom, ecocardiograma fetal, ressonância, tomografia, radiografia — a resposta em " +
+      "<b>Exame</b> é que decide quais campos existem no registro.</p>";
+
+    if (!exames.length) {
+      h += '<div class="aviso"><span>🖼</span><div>Nenhum exame de imagem registrado ainda.</div></div>';
+    } else {
+      h += '<div class="rolagem-tabela"><table class="grade"><thead><tr>' +
+        '<th class="rot">Data</th><th>Exame</th><th>IG</th><th>Peso fetal</th>' +
+        "<th>Doppler</th><th>Colo</th><th></th></tr></thead><tbody>";
+      indicesPorData().forEach(function (i) {
+        var e = exames[i], obst = ehObstetrico(e);
+        var colo = e.colo_uterino_medida_mm ? e.colo_uterino_medida_mm + " mm"
+          : (e.colo_uterino ? rotuloDe(NORMAL_ALTERADO, e.colo_uterino) : "—");
+        h += '<tr' + (i === exameEdit ? ' style="background:#eef6fb"' : "") + ">" +
+          '<td class="grade__nome">' + (e.data_exame ? fmtData(e.data_exame) :
+            '<span style="color:#c0392b">sem data</span>') + "</td>" +
+          "<td>" + esc(rotuloDe(MODALIDADES, e.modalidade) || "—") +
+          (e.modalidade === "outro" && e.modalidade_outro ? " · " + esc(e.modalidade_outro) : "") + "</td>" +
+          "<td>" + (obst ? esc(resumoIG(e)) : "—") + "</td>" +
+          "<td>" + (obst ? esc(resumoPeso(e)) : "—") + "</td>" +
+          "<td>" + (obst ? esc(resumoDoppler(e)) : "—") + "</td>" +
+          "<td>" + (obst ? esc(colo) : "—") + "</td>" +
+          '<td style="white-space:nowrap">' +
+          '<button type="button" class="atalho" data-ex-editar="' + i + '">' +
+          (i === exameEdit ? "editando" : "abrir") + "</button> " +
+          '<button type="button" class="atalho" data-ex-remover="' + i + '">remover</button></td></tr>';
+      });
+      h += "</tbody></table></div>";
+    }
+
+    if (exameEdit === null) {
+      h += '<div style="margin-top:14px">' +
+        '<button type="button" class="botao botao--principal" data-ex-novo="1">' +
+        "Registrar exame de imagem</button></div>";
+      return h;
+    }
+
+    /* ---- formulario do exame aberto ---- */
+    var e = exameAtual();
+    h += '<div class="secao" style="margin-top:16px;border:1px solid #c7d0d9;border-radius:4px;padding:12px">' +
+      '<div class="secao__titulo">Exame ' + (exameEdit + 1) + " de " + exames.length + "</div>";
+
+    h += '<div class="campos">' +
+      exData("data_exame", "Data do exame") +
+      exSel("modalidade", "Exame", MODALIDADES, "g") + "</div>";
+    if (e.modalidade === "outro" || e.modalidade_outro) {
+      h += '<div class="campos">' + exTexto("modalidade_outro", "Qual exame", "g") + "</div>";
+    }
+    h += '<div class="campos">' +
+      exTexto("indicacao", "Indicação — por que foi pedido", "g") +
+      exTexto("servico", "Onde foi feito", "g") + "</div>";
+
+    var obst = ehObstetrico(e), orfao = !obst && temObstetricoPreenchido(e);
+    if (obst || orfao) {
+      h += '<div class="secao" style="margin-top:14px">';
+      if (orfao) {
+        h += '<div class="aviso aviso--atencao"><span>⚠</span><div>' +
+          "<b>Estes campos foram preenchidos e o exame agora é “" +
+          esc(rotuloDe(MODALIDADES, e.modalidade) || "—") + "”.</b>" +
+          " Eles só existem em exame obstétrico — mas o sistema não apaga sozinho." +
+          '<div style="margin-top:6px"><button type="button" class="atalho" data-ex-descartar-obst="1">' +
+          "Descartar os achados obstétricos</button></div></div></div>";
+      }
+      h += '<div class="secao__titulo">Achados obstétricos</div>' +
+        '<div class="campos">' +
+        exSel("tipo", "Finalidade do ultrassom", FINALIDADES_USG, "g") +
+        exNum("ig_semanas", "IG pelo exame — semanas", "como está no laudo") +
+        exNum("ig_dias", "IG — dias") +
+        exNum("peso_fetal_estimado_g", "Peso fetal estimado (g)") +
+        exTexto("peso_fetal_percentil", "Percentil do peso", "p") +
+        exSel("apresentacao", "Apresentação", APRESENTACOES) +
+        "</div>";
+      h += '<div class="campos">' +
+        exTri("liquido_amniotico", "Líquido amniótico", NORMAL_ALTERADO) +
+        exNum("liquido_amniotico_medida_cm", "Maior bolsão ou ILA (cm)") +
+        exSel("placenta", "Placenta", PLACENTAS) +
+        exTexto("placenta_observacao", "Placenta — observação", "g") +
+        exTri("colo_uterino", "Colo do útero", NORMAL_ALTERADO) +
+        exNum("colo_uterino_medida_mm", "Colo — comprimento (mm)") +
+        "</div></div>";
+
+      h += '<div class="secao" style="margin-top:14px">' +
+        '<div class="secao__titulo">Doppler</div>' +
+        '<div class="campos">' +
+        exTri("doppler_uterinas", "Artérias uterinas", NORMAL_ALTERADO) +
+        exTri("doppler_umbilical", "Artéria umbilical", NORMAL_ALTERADO) +
+        exTri("doppler_cerebral_media", "Artéria cerebral média", NORMAL_ALTERADO) +
+        "</div>" +
+        '<div class="campos">' + exArea("doppler_observacao", "Índices (IP/IR) e observação") + "</div>" +
+        '<small style="color:#93a2b1">Normal/Alterado é a leitura de quem viu o exame. ' +
+        "A tela não classifica índice por percentil — só entra cálculo publicado e validado (D-25).</small></div>";
+    }
+
+    h += '<div class="secao" style="margin-top:14px">' +
+      '<div class="secao__titulo">Laudo</div><div class="campos">' +
+      exArea("achados_principais", "Achados principais") +
+      exArea("conclusao", "Conclusão do laudo") + "</div></div>";
+
+    h += '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button type="button" class="botao botao--principal" data-ex-fechar="1">Concluir este exame</button>' +
+      '<button type="button" class="botao" data-ex-novo="1">Concluir e registrar outro</button></div>';
+
+    h += "</div>";
+    return h;
+  };
+
   /* CONTROLE GLICEMICO e bloco proprio na planilha (450-457) e agora e bloco
      proprio na tela. Estava enterrado no fim de "Exames e sorologias", a ~950px
      de rolagem e atras de um botao pequeno -- so achava quem ja sabia que
@@ -1728,6 +2023,11 @@ button { font: inherit; color: inherit; }
     if (bloco === "exame") { n = chaves.filter(function (k) { return /^(ex_|peso|estatura|psist|pdias|spo2|au|bcf|dorp|movf)/.test(k); }).length; return { n: n, t: 20 }; }
     if (bloco === "labor") { n = chaves.filter(function (k) { return /^(soro_|hb|plaq|leuc|glic[^_]|creat|tgo|tsh|t4l|abo|rh|coombs|eas|uroc)/.test(k); }).length; return { n: n, t: 19 }; }
     if (bloco === "calc") { return { n: 0, t: 0 }; }
+    /* Nao ha total previsivel: o numero de exames de imagem de uma gestacao e
+       justamente o que nao se sabe de antemao (D-34). Um exame ja registrado
+       marca o bloco como resolvido; zero deixa sem marca, como qualquer bloco
+       nao tocado -- e nunca como pendencia, porque nao ha quantidade devida. */
+    if (bloco === "imagem") { return { n: exames.length, t: Math.max(1, exames.length) }; }
     if (bloco === "glice") { n = chaves.filter(function (k) { return /^gl_/.test(k); }).length; return { n: n, t: 9 }; }
     if (bloco === "vacin") { n = chaves.filter(function (k) { return /^vac_/.test(k); }).length; return { n: n, t: 6 }; }
     if (bloco === "antec") { n = chaves.filter(function (k) { return /^(pes_|fam_|ist_|ulcg|ant_|ng|np|na)/.test(k); }).length; return { n: n, t: 36 }; }
@@ -1809,7 +2109,7 @@ button { font: inherit; color: inherit; }
 
   function render() {
     var ativo = document.activeElement;
-    var foco = ativo && ativo.dataset ? (ativo.dataset.k || ativo.dataset.gl) : null;
+    var foco = ativo && ativo.dataset ? (ativo.dataset.k || ativo.dataset.gl || ativo.dataset.ex) : null;
     var pos = null;
     // type="date" e "number" lancam ao ler selectionStart. Nenhum campo que
     // dispara redesenho pode ser "number" (ver campoNum), mas o guarda fica:
@@ -1833,7 +2133,7 @@ button { font: inherit; color: inherit; }
     document.getElementById("topo-idade").textContent = idNasc === null ? "—" : idNasc + " anos";
 
     if (foco) {
-      var novo = painel.querySelector('[data-k="' + foco + '"], [data-gl="' + foco + '"]');
+      var novo = painel.querySelector('[data-k="' + foco + '"], [data-gl="' + foco + '"], [data-ex="' + foco + '"]');
       if (novo) {
         // preventScroll: o elemento e um NO NOVO (innerHTML inteiro trocou),
         // entao o navegador nao sabe que ele ocupa a mesma posicao de antes e
@@ -2095,6 +2395,52 @@ button { font: inherit; color: inherit; }
       }
     }
 
+    /* EXAMES DE IMAGEM (D-34): um paragrafo por exame, em ordem de data — a
+       mesma ordem da tela. Sai inteiro no texto mesmo quando a coluna existe,
+       porque o prontuario oficial ainda e a evolucao do AGHU, e e la que a
+       serie precisa ser lida por quem nao abre esta tela. */
+    if (examesPreenchidos().length) {
+      var linhasImg = indicesPorData().filter(function (i) {
+        return !exameVazio(exames[i]);
+      }).map(function (i) {
+        var e = exames[i], obst = ehObstetrico(e);
+        var cab = (e.data_exame ? fmtData(e.data_exame) : "data não informada") + " — " +
+          (rotuloDe(MODALIDADES, e.modalidade) || "exame não especificado") +
+          (e.modalidade === "outro" && e.modalidade_outro ? " (" + e.modalidade_outro + ")" : "");
+        var det = [];
+        if (e.indicacao) { det.push("indicação: " + e.indicacao); }
+        if (e.servico) { det.push("em " + e.servico); }
+        if (obst) {
+          if (e.tipo) { det.push(rotuloDe(FINALIDADES_USG, e.tipo)); }
+          if (e.ig_semanas !== undefined && e.ig_semanas !== "") { det.push("IG pelo exame " + resumoIG(e)); }
+          if (e.peso_fetal_estimado_g || e.peso_fetal_percentil) {
+            det.push("peso fetal estimado " + resumoPeso(e));
+          }
+          if (e.apresentacao) { det.push("apresentação " + rotuloDe(APRESENTACOES, e.apresentacao).toLowerCase()); }
+          if (e.liquido_amniotico) {
+            det.push("líquido amniótico " + rotuloDe(NORMAL_ALTERADO, e.liquido_amniotico).toLowerCase() +
+              (e.liquido_amniotico_medida_cm ? " (" + virg(e.liquido_amniotico_medida_cm) + " cm)" : ""));
+          }
+          if (e.placenta) {
+            det.push("placenta " + rotuloDe(PLACENTAS, e.placenta).toLowerCase() +
+              (e.placenta_observacao ? " — " + e.placenta_observacao : ""));
+          }
+          if (e.colo_uterino || e.colo_uterino_medida_mm) {
+            det.push("colo " + (e.colo_uterino ? rotuloDe(NORMAL_ALTERADO, e.colo_uterino).toLowerCase() : "medido") +
+              (e.colo_uterino_medida_mm ? " (" + virg(e.colo_uterino_medida_mm) + " mm)" : ""));
+          }
+          DOPPLERS.forEach(function (d) {
+            if (e[d.c]) { det.push("Doppler de " + d.r + " " + rotuloDe(NORMAL_ALTERADO, e[d.c]).toLowerCase()); }
+          });
+          if (e.doppler_observacao) { det.push("Doppler: " + e.doppler_observacao); }
+        }
+        if (e.achados_principais) { det.push("achados: " + e.achados_principais); }
+        if (e.conclusao) { det.push("conclusão: " + e.conclusao); }
+        return cab + (det.length ? ". " + det.join("; ") : "") + ".";
+      });
+      blocos.push("EXAMES DE IMAGEM\n" + linhasImg.join("\n"));
+    }
+
     bloco("Condutas", [
       secao("Orientações", ORIENTACOES.map(function (o) {
         return get("cond_" + o.id) === "sim" ? o.n : "";
@@ -2108,9 +2454,6 @@ button { font: inherit; color: inherit; }
         return "Retorno em " + sem + " semana(s) (≈ " + fmtData(d.toISOString().slice(0, 10)) + ")";
       })(),
       get("ageu") ? "Ultrassom agendado para " + fmtData(get("ageu")) : "",
-      item("Ultrassonografia obstétrica", "ulto"),
-      item("Morfológica de 1º trimestre", "ultm"),
-      item("Morfológica de 2º trimestre", "ult2"),
       item("Outras observações", "outo")]);
 
     var agora = new Date();
@@ -2129,8 +2472,11 @@ button { font: inherit; color: inherit; }
       (quem ? "Paciente: " + quem + "\n" : "Paciente não identificada nesta tela.\n");
     var corpo = blocos.length ? blocos.join("\n\n")
       : "Nenhum campo preenchido até agora.";
+    var nImg = examesPreenchidos().length;
     var rodape = "\n\nExportado do AGMEJC (protótipo) em " + carimbo + " · " +
-      Object.keys(dados).length + " campo(s) preenchido(s). Campo não citado = não preenchido.";
+      Object.keys(dados).length + " campo(s) preenchido(s)" +
+      (nImg ? " e " + nImg + " exame(s) de imagem" : "") +
+      ". Campo não citado = não preenchido.";
     return cab + "\n" + corpo + rodape;
   }
 
@@ -2323,13 +2669,47 @@ button { font: inherit; color: inherit; }
     "vac_vsr": [["vac_vsr","status_vacina"]], "zonr": [["zona_residencia","zona_residencia"]]
   };
 
+  /* Contrato da tabela FILHA (D-34): uma linha por exame de imagem. Mesma
+     regra do CONTRATO_CAMPOS acima -- gerado a partir de docs/campos.yaml,
+     conferido por scripts/gerar_contrato.py, que FALHA se divergir. Chave e
+     coluna coincidem aqui porque o bloco e novo: nao ha nome de tela herdado
+     de planilha para reconciliar. */
+  var CONTRATO_IMAGEM = {
+    "achados_principais": [["achados_principais","text"]],
+    "apresentacao": [["apresentacao","apresentacao_fetal"]],
+    "colo_uterino": [["colo_uterino","achado_exame"]],
+    "colo_uterino_medida_mm": [["colo_uterino_medida_mm","numeric"]],
+    "conclusao": [["conclusao","text"]],
+    "data_exame": [["data_exame","date"]],
+    "doppler_cerebral_media": [["doppler_cerebral_media","achado_exame"]],
+    "doppler_observacao": [["doppler_observacao","text"]],
+    "doppler_umbilical": [["doppler_umbilical","achado_exame"]],
+    "doppler_uterinas": [["doppler_uterinas","achado_exame"]],
+    "ig_dias": [["ig_dias","integer"]],
+    "ig_semanas": [["ig_semanas","integer"]],
+    "indicacao": [["indicacao","text"]],
+    "liquido_amniotico": [["liquido_amniotico","achado_exame"]],
+    "liquido_amniotico_medida_cm": [["liquido_amniotico_medida_cm","numeric"]],
+    "modalidade": [["modalidade","modalidade_imagem"]],
+    "modalidade_outro": [["modalidade_outro","text"]],
+    "peso_fetal_estimado_g": [["peso_fetal_estimado_g","numeric"]],
+    "peso_fetal_percentil": [["peso_fetal_percentil","text"]],
+    "placenta": [["placenta","posicao_placenta"]],
+    "placenta_observacao": [["placenta_observacao","text"]],
+    "servico": [["servico","text"]],
+    "tipo": [["tipo","tipo_ultrassom"]]
+  };
+
   var CONTRATO_DOMINIOS = {
-    "achado_exame": ["normal","alterado"], "coombs": ["negativo","positivo","sem_resultado"],
+    "achado_exame": ["normal","alterado"],
+    "apresentacao_fetal": ["cefalica","pelvica","cormica","nao_avaliavel"],
+    "coombs": ["negativo","positivo","sem_resultado"],
     "escolaridade": ["sem_escolaridade","fundamental_incompleto","fundamental_completo","medio_incompleto","medio_completo","superior_incompleto","superior_completo","pos_graduacao","nao_informado"],
     "estado_civil": ["casada","solteira","viuva","divorciada","uniao_estavel"],
     "estado_clinico": ["sim","nao","nao_sabe"],
     "fator_rh": ["negativo","positivo","nao_realizado"],
     "grupo_abo": ["a","b","ab","o","nao_realizada"],
+    "modalidade_imagem": ["ultrassom_obstetrico","ecocardiograma_fetal","ultrassom_nao_obstetrico","doppler_venoso_mmii","ecocardiograma_materno","ressonancia_magnetica","tomografia","radiografia","outro"],
     "mov_fetal": ["presente","ausente","nao_avaliavel"], "origem_ig": ["dum","informada"],
     "posicao_placenta": ["normoinserida","baixa","previa","outro"],
     "presenca": ["ausente","presente"],
@@ -2400,6 +2780,39 @@ button { font: inherit; color: inherit; }
      Chave preenchida que nao tem coluna nao e engolida em silencio: sai na
      lista `semColuna` e aparece no popup. Hoje isso pega o edema e as datas de
      vacina, que a tela coleta e o contrato ainda nao tem onde guardar. */
+  /* Converte um valor da tela para o que a coluna aceita. Devolve {v} quando
+     deu certo e {erro} quando nao -- nunca um valor "mais ou menos".
+
+     Mora fora de montarRegistro() porque as DUAS tabelas passam por aqui
+     (pnar_primeira_consulta e pnar_exame_imagem, D-34). Duas copias desta
+     conversao divergiriam, e a divergencia so apareceria no prontuario. */
+  function converterValor(tipo, v) {
+    if (CONTRATO_DOMINIOS[tipo]) {
+      var d = paraDominio(tipo, v);
+      if (CONTRATO_DOMINIOS[tipo].indexOf(d) < 0) {
+        /* "N\u00e3o sabe" e a resposta que mais cai aqui, e nao por descuido: em
+           coombs, fator_rh e grupo_abo o dominio so tem NULL para ela, e
+           NULL ja significa "nao perguntei". Colapsar as duas e exatamente
+           o que a pendencia 6 esta em aberto para decidir \u2014 entao o campo
+           nao e gravado, e o popup diz isso. */
+        return { erro: d === "nsabe"
+          ? "\u201cN\u00e3o sabe\u201d ainda n\u00e3o tem valor em " + tipo + " (pend\u00eancia 6)"
+          : "\u201c" + v + "\u201d n\u00e3o \u00e9 valor de " + tipo };
+      }
+      return { v: d };
+    }
+    if (tipo === "integer") {
+      var n = parseInt(String(v).replace(",", "."), 10);
+      return isNaN(n) ? { erro: "\u201c" + v + "\u201d nao e inteiro" } : { v: n };
+    }
+    if (tipo === "numeric") {
+      var f = parseFloat(String(v).replace(",", "."));
+      return isNaN(f) ? { erro: "\u201c" + v + "\u201d nao e numero" } : { v: f };
+    }
+    if (tipo === "boolean") { return { v: (v === true || v === "sim" || v === "1") }; }
+    return { v: String(v) };
+  }
+
   function montarRegistro(protocolo) {
     var linha = {}, problemas = [], semColuna = [];
     Object.keys(dados).forEach(function (k) {
@@ -2408,39 +2821,15 @@ button { font: inherit; color: inherit; }
       var v = dados[k];
       if (v === "" || v === null || v === undefined) { return; }
       if (!c) { semColuna.push(k); return; }
-      var tipo = c[0][1], valor;
-      if (CONTRATO_DOMINIOS[tipo]) {
-        var d = paraDominio(tipo, v);
-        if (CONTRATO_DOMINIOS[tipo].indexOf(d) < 0) {
-          /* "N\u00e3o sabe" e a resposta que mais cai aqui, e nao por descuido: em
-             coombs, fator_rh e grupo_abo o dominio so tem NULL para ela, e
-             NULL ja significa "nao perguntei". Colapsar as duas e exatamente
-             o que a pendencia 6 esta em aberto para decidir \u2014 entao o campo
-             nao e gravado, e o popup diz isso. */
-          problemas.push(d === "nsabe"
-            ? k + ": \u201cN\u00e3o sabe\u201d ainda n\u00e3o tem valor em " + tipo + " (pend\u00eancia 6)"
-            : k + ": \u201c" + v + "\u201d n\u00e3o \u00e9 valor de " + tipo);
-          return;
-        }
-        valor = d;
-      } else if (tipo === "integer") {
-        valor = parseInt(String(v).replace(",", "."), 10);
-        if (isNaN(valor)) { problemas.push(k + ": \u201c" + v + "\u201d nao e inteiro"); return; }
-      } else if (tipo === "numeric") {
-        valor = parseFloat(String(v).replace(",", "."));
-        if (isNaN(valor)) { problemas.push(k + ": \u201c" + v + "\u201d nao e numero"); return; }
-      } else if (tipo === "boolean") {
-        valor = (v === true || v === "sim" || v === "1");
-      } else {
-        valor = String(v);
-      }
+      var r = converterValor(c[0][1], v);
+      if (r.erro) { problemas.push(k + ": " + r.erro); return; }
       /* Uma chave pode alimentar MAIS DE UMA coluna. Os pares de sorologia
          (HBsAg/anti-HBs, toxo IgG/IgM, CMV IgG/IgM) sao uma pergunta so na
          tela e dois codigos na planilha \u2014 553 e 554, 556 e 557, 558 e 559 \u2014,
          e o registro marca isso com "fundido com". O resultado interpretado
          vai para as duas colunas: apagar uma perderia o codigo da planilha,
          que e o que liga esta tela ao instrumento da medica. */
-      c.forEach(function (par) { linha[par[0]] = valor; });
+      c.forEach(function (par) { linha[par[0]] = r.v; });
     });
 
     /* Derivados: existem como coluna e nao como campo de tela. Cada um so
@@ -2466,11 +2855,91 @@ button { font: inherit; color: inherit; }
     return { linha: linha, problemas: problemas, semColuna: semColuna };
   }
 
+  /* Linhas de pnar_exame_imagem (D-34). Mesma disciplina de montarRegistro():
+     o que a tela nao souber converter nao e gravado e o popup diz qual.
+
+     Exame SEM NENHUM campo preenchido nao vira linha: "Registrar exame"
+     clicado por engano nao pode deixar um exame em branco no prontuario. */
+  function montarExames() {
+    var linhas = [], problemas = [];
+    exames.forEach(function (e, i) {
+      var linha = {}, tem = false;
+      Object.keys(e).forEach(function (k) {
+        var v = e[k];
+        if (v === "" || v === null || v === undefined) { return; }
+        var c = CONTRATO_IMAGEM[k];
+        if (!c) { problemas.push("exame " + (i + 1) + ": " + k + " não tem coluna"); return; }
+        var r = converterValor(c[0][1], v);
+        if (r.erro) { problemas.push("exame " + (i + 1) + " · " + k + ": " + r.erro); return; }
+        c.forEach(function (par) { linha[par[0]] = r.v; });
+        tem = true;
+      });
+      if (!tem) { return; }
+      /* Um protocolo POR EXAME, gerado aqui: a gravacao e cega (D-30) e o
+         recibo tem que ser um id que o navegador ja conhecia. */
+      linha.protocolo = uuid();
+      /* O que liga o exame a paciente. Sem prontuario a linha ainda e gravada
+         -- perder o exame seria pior --, mas fica orfa, e o popup avisa. */
+      if (get("prontuario")) { linha.prontuario = get("prontuario"); }
+      linhas.push(linha);
+    });
+    return { linhas: linhas, problemas: problemas };
+  }
+
+  /* O PostgREST exige que TODOS os objetos de um INSERT em lote tenham
+     EXATAMENTE as mesmas chaves -- se diferirem, recusa o lote inteiro com
+     PGRST102 "All object keys must match". E os exames tem chaves diferentes
+     por desenho: a radiografia nao carrega campo obstetrico nenhum, e o
+     ultrassom carrega dezesseis. Sem isto, gravar dois exames de tipos
+     diferentes falhava SEMPRE (medido contra o servidor em 2026-08-15).
+
+     A saida e o cliente uniformizar: uniao das chaves, faltante vai `null` --
+     que e exatamente o que "nao preenchido" ja significa nesta tabela (D-06),
+     entao nao se inventa dado nenhum.
+
+     ARMADILHA, ao mexer aqui: isto so e seguro para coluna SEM DEFAULT no
+     banco. Mandar `null` explicito ANULA o default -- `gravado_em` (DEFAULT
+     now(), posto em docs/backend/supabase.sql) ficaria vazia, e e ela que
+     permite auditar uma gravacao cega. Hoje nao acontece porque a uniao sai
+     das chaves que o CLIENTE escreve, e o cliente nunca escreve `gravado_em`
+     nem `id`. Se algum dia a tela passar a mandar uma coluna com default,
+     esta funcao precisa exclui-la.
+
+     `Prefer: missing=default` resolveria isso no servidor, e foi tentado:
+     este PostgREST devolve o mesmo PGRST102. */
+  function uniformizarChaves(linhas) {
+    var todas = {};
+    linhas.forEach(function (l) {
+      Object.keys(l).forEach(function (k) { todas[k] = true; });
+    });
+    return linhas.map(function (l) {
+      var completa = {};
+      Object.keys(todas).forEach(function (k) {
+        completa[k] = (l[k] === undefined) ? null : l[k];
+      });
+      return completa;
+    });
+  }
+
   function gravarLocal(linha) {
     try {
       var k = "pnar:atendimentos";
       var l = JSON.parse(localStorage.getItem(k) || "[]");
       l.push(linha);
+      localStorage.setItem(k, JSON.stringify(l));
+      return { ok: true, total: l.length };
+    } catch (e) { return { ok: false, erro: String(e) }; }
+  }
+
+  /* Chave separada, e nao um campo dentro do atendimento: o exame de imagem
+     pertence a PACIENTE (ligado por prontuario), nao a consulta em que foi
+     visto -- um laudo de marco pode ser digitado na consulta de agosto. */
+  function gravarExamesLocal(linhas) {
+    if (!linhas.length) { return { ok: true, total: 0 }; }
+    try {
+      var k = "pnar:exames-imagem";
+      var l = JSON.parse(localStorage.getItem(k) || "[]");
+      linhas.forEach(function (x) { l.push(x); });
       localStorage.setItem(k, JSON.stringify(l));
       return { ok: true, total: l.length };
     } catch (e) { return { ok: false, erro: String(e) }; }
@@ -2482,8 +2951,10 @@ button { font: inherit; color: inherit; }
      clique nao pegou e clica de novo. */
   var ESPERA_SERVIDOR_MS = 12000;
 
-  function enviarServidor(linha) {
-    var corrida = fetch(SUPABASE.url.replace(/\/$/, "") + "/rest/v1/pnar_primeira_consulta", {
+  /* `corpo` pode ser um objeto (uma linha) ou um array (varias de uma vez, o
+     caso dos exames de imagem) — o PostgREST aceita os dois no mesmo POST. */
+  function enviarServidor(tabela, corpo) {
+    var corrida = fetch(SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + tabela, {
       method: "POST",
       headers: {
         apikey: SUPABASE.anonKey,
@@ -2494,7 +2965,7 @@ button { font: inherit; color: inherit; }
            INSERT inteiro falha por falta de permissao de LEITURA. */
         Prefer: "return=minimal"
       },
-      body: JSON.stringify(linha)
+      body: JSON.stringify(corpo)
     }).then(function (r) {
       if (r.ok) { return { ok: true }; }
       return r.text().then(function (t) {
@@ -2520,10 +2991,16 @@ button { font: inherit; color: inherit; }
      "Exportar atendimento" fica disponivel nos tres desfechos — inclusive no
      de falha, que e justamente quando nao se pode perder o texto. */
   function mostrarSalvo(e) {
-    var cor = e.pendente ? "medio" : (e.ok ? (e.onde === "servidor" ? "bom" : "medio") : "ruim");
+    /* Sao DUAS tabelas desde a D-34, e elas podem ter desfechos diferentes.
+       Dizer so "Consulta salva" quando os exames de imagem falharam seria
+       mentir por omissao — e a omissao some justamente onde doi, porque a
+       chave publica nao le de volta para ninguem conferir depois. */
+    var cor = e.pendente ? "medio"
+      : (!e.ok ? "ruim" : (e.examesErro ? "medio" : (e.onde === "servidor" ? "bom" : "medio")));
     var titulo = e.pendente ? "Gravando…"
       : (!e.ok ? "Não foi possível gravar"
-        : (e.onde === "servidor" ? "Consulta salva" : "Consulta salva neste navegador"));
+        : (e.examesErro ? "Consulta salva; exames de imagem não"
+          : (e.onde === "servidor" ? "Consulta salva" : "Consulta salva neste navegador")));
     var topicos = [];
     /* O popup aparece na hora, antes da resposta do servidor. Botao que fica
        mudo enquanto a rede pensa e clicado de novo — e cada clique gravaria
@@ -2541,6 +3018,21 @@ button { font: inherit; color: inherit; }
     if (e.protocolo) { topicos.push("Protocolo <code>" + esc(e.protocolo) + "</code>"); }
     if (e.quem) { topicos.push("Paciente: <b>" + esc(e.quem) + "</b>"); }
     if (e.campos !== undefined) { topicos.push(e.campos + " campo(s) gravado(s)."); }
+    /* Exames de imagem: tabela separada, desfecho separado, dito separado. */
+    if (e.examesErro) {
+      topicos.push("<b>" + e.exames + " exame(s) de imagem NÃO foram gravados no banco:</b> " +
+        esc(e.examesErro) + " — ficaram neste navegador e no texto da exportação.");
+    } else if (e.exames) {
+      topicos.push(e.exames + " exame(s) de imagem gravado(s)" +
+        (e.pendente ? " neste navegador, enviando…" : "") + ".");
+    }
+    /* Exame gravado sem prontuario fica sem a que paciente pertence: e a
+       unica chave que liga a tabela filha (D-34), e a chave publica nao le
+       para alguem corrigir depois. */
+    if (e.exames && !e.temProntuario) {
+      topicos.push("<b>Sem nº de prontuário:</b> os exames de imagem gravam, mas ficam sem " +
+        "ligação com a paciente. Preencha o prontuário em Identificação.");
+    }
     /* Campo preenchido sem coluna no contrato NAO some calado. Hoje isto pega
        o edema e as datas de vacina — a tela coleta, o contrato ainda nao tem
        onde guardar, e quem atendeu precisa saber disso antes de fechar. */
@@ -2569,22 +3061,26 @@ button { font: inherit; color: inherit; }
     if (enviando) { return; }
     var protocolo = uuid();
     var m = montarRegistro(protocolo);
+    var mx = montarExames();
     var idn = idadeDe(get("dnasc"));
     var quem = [get("nome"), get("prontuario") ? "prontuário " + get("prontuario") : "",
       idn === null ? "" : idn + " anos"].filter(function (x) { return x; }).join(" · ");
     var base = {
       protocolo: protocolo, quem: quem,
       campos: Object.keys(m.linha).length,
-      semColuna: m.semColuna, problemas: m.problemas
+      exames: mx.linhas.length,
+      temProntuario: !!get("prontuario"),
+      semColuna: m.semColuna, problemas: m.problemas.concat(mx.problemas)
     };
     /* Campo que a tela nao soube converter NAO cancela a gravacao. Cancelar
        perderia o atendimento inteiro por causa de um "Não sabe" num tipo
        sanguineo — e o registro oficial e a evolucao do AGHU, que sai completa
        na exportacao. O campo fica de fora, e o popup nomeia qual e por que. */
     var local = gravarLocal(m.linha);
+    var localEx = gravarExamesLocal(mx.linhas);
     if (!SUPABASE.url || !SUPABASE.anonKey) {
       mostrarSalvo(Object.assign({}, base, {
-        ok: local.ok, onde: "navegador", erro: local.erro
+        ok: local.ok && localEx.ok, onde: "navegador", erro: local.erro || localEx.erro
       }));
       return;
     }
@@ -2594,12 +3090,21 @@ button { font: inherit; color: inherit; }
     if (botao) { botao.disabled = true; }
     mostrarSalvo(Object.assign({}, base, { pendente: true, ok: local.ok, onde: "navegador" }));
 
-    enviarServidor(m.linha).then(function (r) {
+    /* As duas tabelas vao JUNTAS e sao relatadas SEPARADAS. Encadear (so
+       mandar os exames se a consulta passar) perderia os exames por um erro
+       que nao e deles; fundir os desfechos num "ok" so esconderia metade. */
+    Promise.all([
+      enviarServidor("pnar_primeira_consulta", m.linha),
+      mx.linhas.length ? enviarServidor("pnar_exame_imagem", uniformizarChaves(mx.linhas))
+        : Promise.resolve({ ok: true })
+    ]).then(function (res) {
+      var r = res[0], rx = res[1];
       enviando = false;
       if (botao) { botao.disabled = false; }
       mostrarSalvo(Object.assign({}, base, {
         ok: r.ok, onde: r.ok ? "servidor" : "navegador",
-        erro: r.ok ? null : r.erro + (local.ok ? " — a consulta ficou guardada neste navegador." : "")
+        erro: r.ok ? null : r.erro + (local.ok ? " — a consulta ficou guardada neste navegador." : ""),
+        examesErro: rx.ok ? null : rx.erro
       }));
     });
   }
@@ -2618,6 +3123,41 @@ button { font: inherit; color: inherit; }
       set(ch, get(ch) === v ? null : v);
       render(); return;
     }
+    /* ---- exames de imagem (D-34) ---- */
+    if (t.parentElement && t.parentElement.dataset.exTri) {
+      var cEx = t.parentElement.dataset.exTri;
+      exSet(cEx, exGet(cEx) === t.dataset.v ? null : t.dataset.v);
+      render(); return;
+    }
+    if (t.dataset.exNovo) {
+      exames.push({});
+      exameEdit = exames.length - 1;
+      render(); painel.scrollTop = painel.scrollHeight; return;
+    }
+    if (t.dataset.exEditar) {
+      var iEd = parseInt(t.dataset.exEditar, 10);
+      exameEdit = (exameEdit === iEd) ? null : iEd;
+      render(); return;
+    }
+    if (t.dataset.exRemover) {
+      var iRm = parseInt(t.dataset.exRemover, 10), ex = exames[iRm];
+      var quantos = Object.keys(ex).length;
+      /* Exame vazio sai sem perguntar -- e o que sobra de um "Registrar"
+         clicado por engano, e confirmar o obvio ensina a ignorar o aviso.
+         Com qualquer campo preenchido, pergunta: aqui nao ha desfazer. */
+      if (quantos && !confirm("Remover este exame de imagem?\n\n" + quantos +
+        " campo(s) preenchido(s). Não há como desfazer.")) { return; }
+      exames.splice(iRm, 1);
+      if (exameEdit === iRm) { exameEdit = null; }
+      else if (exameEdit !== null && exameEdit > iRm) { exameEdit--; }
+      render(); return;
+    }
+    if (t.dataset.exFechar) { exameEdit = null; render(); return; }
+    if (t.dataset.exDescartarObst) {
+      CAMPOS_OBSTETRICOS.forEach(function (c) { exSet(c, null); });
+      render(); return;
+    }
+
     if (t.dataset.hab) { set("hab_" + t.dataset.hab, get("hab_" + t.dataset.hab) === t.dataset.v ? null : t.dataset.v); render(); return; }
     if (t.dataset.soro) { set("soro_" + t.dataset.soro, get("soro_" + t.dataset.soro) === t.dataset.v ? null : t.dataset.v); render(); return; }
     if (t.dataset.vac) { set("vac_" + t.dataset.vac, get("vac_" + t.dataset.vac) === t.dataset.v ? null : t.dataset.v); render(); return; }
@@ -2650,7 +3190,12 @@ button { font: inherit; color: inherit; }
       var n = Object.keys(dados).length;
       try {
         localStorage.setItem("pnar:rascunho", JSON.stringify(dados));
-        alert("Rascunho guardado neste navegador com " + n + " campo(s).\n\n" +
+        // Os exames vao no MESMO rascunho, em chave propria: guardar so
+        // `dados` faria o rascunho voltar sem os exames de imagem, e sem
+        // avisar que eles ficaram para tras.
+        localStorage.setItem("pnar:rascunho-exames", JSON.stringify(exames));
+        alert("Rascunho guardado neste navegador com " + n + " campo(s)" +
+          (examesPreenchidos().length ? " e " + examesPreenchidos().length + " exame(s) de imagem" : "") + ".\n\n" +
           "Não é a gravação do atendimento: para isso, use “Finalizar consulta”.");
       } catch (e) {
         alert("Não foi possível guardar o rascunho neste navegador.\n\n" + e);
@@ -2714,7 +3259,13 @@ button { font: inherit; color: inherit; }
     if (el.dataset && el.dataset.k && el.type === "date") {
       set(el.dataset.k, el.value);
       atualizarDerivados();
+      return;
     }
+    /* Exames de imagem: rede de seguranca para o navegador que nao dispara
+       "input" em <select> ou em type="date". NAO redesenha -- quem redesenha
+       e o "input" da modalidade; fazer os dois redesenhar dobraria o trabalho
+       e trocaria o no do DOM debaixo de um campo de data em digitacao. */
+    if (el.dataset && el.dataset.ex) { exSet(el.dataset.ex, el.value); }
   });
 
   /* No blur o campo tambem NAO redesenha. A primeira versao redesenhava aqui, e
@@ -2740,6 +3291,15 @@ button { font: inherit; color: inherit; }
     // "nome" entra porque o cabecalho o espelha: digitar e ver o nome mudar la
     // em cima e o que confirma que o atendimento vai ser gravado na paciente certa.
     var REDESENHA = ["ng", "np", "na", "peso", "estatura", "spo2", "ano_ult_parto", "creat", "nome"];
+    /* Exames de imagem: SO a modalidade redesenha, porque e ela que abre e
+       fecha o grupo obstetrico (D-18). Texto, numero e data nao redesenham --
+       trocar o no do DOM leva o cursor junto, e a tabela da serie la em cima
+       e atualizada ao concluir o exame, que e quando ela passa a ser lida. */
+    if (el.dataset.ex) {
+      exSet(el.dataset.ex, el.value);
+      if (el.dataset.ex === "modalidade") { render(); }
+      return;
+    }
     if (el.dataset.k) {
       set(el.dataset.k, el.value);
       // NAO redesenha em "input" de campo de data. O navegador PROIBE ler
@@ -2760,9 +3320,14 @@ button { font: inherit; color: inherit; }
   /* Fechar por ESC ou por clique no fundo apagaria ate 157 campos digitados.
      Com dados preenchidos, exige confirmacao explicita. */
   function tentarFechar() {
-    if (Object.keys(dados).length && !confirm(
-        "Fechar o formulário? Há " + Object.keys(dados).length +
-        " campo(s) preenchido(s) que serão perdidos.\n\nCancele e use “Salvar rascunho” se quiser voltar depois.")) {
+    var n = Object.keys(dados).length, nImg = examesPreenchidos().length;
+    // Exame de imagem tambem se perde ao fechar, e sao muitos campos por
+    // exame: contar so `dados` faria o aviso subestimar o que vai embora.
+    var quanto = n + " campo(s) preenchido(s)" +
+      (nImg ? " e " + nImg + " exame(s) de imagem" : "");
+    if ((n || nImg) && !confirm(
+        "Fechar o formulário? Há " + quanto +
+        " que serão perdidos.\n\nCancele e use “Salvar rascunho” se quiser voltar depois.")) {
       return;
     }
     document.getElementById("modal").style.display = "none";
