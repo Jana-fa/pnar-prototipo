@@ -1616,11 +1616,13 @@ button { font: inherit; color: inherit; }
 
     h += '<div class="campos">' + campoData("ageu", "Ultrassom agendado para", "703", "m") + "</div>";
 
+    /* As tres caixas fixas de texto (650/651/652) sairam daqui: nao sobrevivem
+       a uma gestacao de alto risco com dezenas de USG. Superadas por
+       pnar_ultrassom, tabela propria e sem limite de linhas (D-34) -- ainda
+       sem tela; o campo continua no banco, so nao e mais escrito por aqui. */
     h += '<div class="secao"><div class="secao__titulo">Ultrassonografias</div>' +
-      '<div class="campos">' +
-      campoArea("ulto", "Ultrassonografia obstétrica", "650") +
-      campoArea("ultm", "Morfológica de 1º trimestre", "651") +
-      campoArea("ult2", "Morfológica de 2º trimestre", "652") + "</div></div>";
+      '<p class="painel__nota">Os registros de ultrassom (data, tipo, achados) passaram a ter ' +
+      "tabela própria, sem limite de quantos exames por gestação. Ainda sem tela — ver D-34.</p></div>";
     h += '<div class="campos">' + campoArea("outo", "Outras observações", "709") + "</div>";
     return h;
   };
@@ -2312,8 +2314,7 @@ button { font: inherit; color: inherit; }
     "tgo": [["tgo","numeric"]], "totg1": [["totg_medida1","numeric"]],
     "totg2": [["totg_medida2h","numeric"]], "tsh": [["tsh","numeric"]],
     "ulcg": [["lesao_ulcera_genital","estado_clinico"]],
-    "ult2": [["usg_morfologica_2tri","text"]], "ultm": [["usg_morfologica_1tri","text"]],
-    "ulto": [["usg_obstetrica","text"]], "uroc": [["urocultura","achado_exame"]],
+    "uroc": [["urocultura","achado_exame"]],
     "uroq": [["urocultura_microrganismo","text"]],
     "vac_covi": [["vac_covid","status_vacina"]], "vac_dt": [["vac_dt","status_vacina"]],
     "vac_dtpa": [["vac_dtpa","status_vacina"]],
@@ -2330,13 +2331,20 @@ button { font: inherit; color: inherit; }
     "fator_rh": ["negativo","positivo","nao_realizado"],
     "grupo_abo": ["a","b","ab","o","nao_realizada"],
     "mov_fetal": ["presente","ausente","nao_avaliavel"], "origem_ig": ["dum","informada"],
+    "posicao_placenta": ["normoinserida","baixa","previa","outro"],
     "presenca": ["ausente","presente"],
     "sorologia": ["nao_reagente","reagente","sem_resultado"],
     "sorologia_par": ["suscetivel","imune","infeccao_ativa","possivel_infeccao_aguda","indeterminado","sem_resultado"],
     "status_vacina": ["nao_vacinada","vacinada","sem_data","nao_informado"],
+    "tipo_ultrassom": ["datacao","morfologico_1tri","morfologico_2tri","obstetrico_doppler","perfil_biofisico","outro"],
     "unidade_creatinina": ["mg_dl","umol_l"], "uso_substancia": ["nunca","parou","atual"],
     "zona_residencia": ["urbana","rural"]
   };
+
+  /* posicao_placenta e tipo_ultrassom (D-34, pnar_ultrassom) precisam estar
+     aqui mesmo sem nenhum campo os usando ainda via CONTRATO_CAMPOS -- o
+     gerador confere CONTRATO_DOMINIOS contra TODO dominio do registro,
+     nao so os referenciados por um campo com prototipo. */
 
   // Estado de interface que nao e dado clinico e por isso nao tem coluna.
   var NAO_E_DADO = ["forcar_obst", "ig_informada"];
