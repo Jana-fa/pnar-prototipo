@@ -253,11 +253,10 @@ button { font: inherit; color: inherit; }
 /* Gramática de linha única: rótulo com largura fixa, controle sempre na mesma
    coluna x, em todos os blocos. Antes o controle caía em 3 posições diferentes
    só dentro de Antecedentes, e isso fazia a tela parecer sem estrutura. */
-/* Resultado da calculadora e ressalvas num cartao SO. Eram duas caixas
-   empilhadas, a segunda com tres paragrafos corridos -- quem esta atendendo
-   varre, nao le. A cor da borda e do selo carrega a confianca; as ressalvas sao
-   topicos curtos. O numero pontual sozinho esconde a incerteza que ele carrega
-   quando ha dado faltando (Mathiszig-Lee 2022, NPJ Digit Med). */
+/* Cartao de calculadora (D-35). A cor da borda e do selo carrega a faixa; as
+   ressalvas sao topicos curtos -- quem esta atendendo varre, nao le. O numero
+   pontual sozinho esconde a incerteza que ele carrega quando ha dado faltando
+   (Mathiszig-Lee 2022, NPJ Digit Med). */
 .cartao-calc {
   border: 1px solid var(--borda-forte); border-left-width: 4px; border-radius: 4px;
   padding: 12px 16px; margin-top: 16px; background: var(--branco);
@@ -266,12 +265,8 @@ button { font: inherit; color: inherit; }
 .cartao-calc--medio { border-left-color: var(--ambar); }
 .cartao-calc--ruim  { border-left-color: var(--vermelho); }
 .cartao-calc__topo { display: flex; align-items: center; gap: 14px; }
-.cartao-calc__rot {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--texto-fraco); font-weight: 700;
-}
 .cartao-calc__valor {
-  font-size: 24px; font-weight: 300; color: var(--texto-forte);
+  display: block; font-size: 24px; font-weight: 300; color: var(--texto-forte);
   margin-top: 2px; font-variant-numeric: tabular-nums;
 }
 /* Asterisco do alinhamento com a calculadora oficial: visivel o bastante para
@@ -294,6 +289,51 @@ button { font: inherit; color: inherit; }
   font-size: 11.5px; color: var(--texto); line-height: 1.65;
 }
 .cartao-calc__notas li { margin-bottom: 2px; }
+
+/* Um cartao por calculadora, em grade, com o detalhe sob clique (D-35).
+   A face NAO e resumo do detalhe: ela carrega o resultado e tudo que muda o
+   significado dele -- o asterisco da D-27, a SpO2 assumida, o que falta
+   preencher. O clique so revela detalhe: insumo a insumo, ressalvas de
+   validade, referencia. O cartao aberto ocupa a linha inteira, porque a
+   lista de insumos nao cabe na largura de um cartao fechado. */
+.calc-grade {
+  /* min(260px, 100%): abaixo de ~380px o minimo fixo estourava o painel com
+     rolagem horizontal -- a mesma classe de defeito dos chips de 152px, so
+     que aqui a valvula cabe na propria trilha, sem media query. */
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 12px; margin-top: 16px; align-items: start;
+}
+.calc-grade .cartao-calc { margin-top: 0; }
+.cartao-calc--aberto { grid-column: 1 / -1; }
+.cartao-calc--prep { border-left-color: var(--borda-forte); }
+.cartao-calc--prep .cartao-calc__nivel { background: #f4f6f8; color: var(--texto-fraco); }
+/* Nome da calculadora SEM text-transform: a grafia e parte do nome
+   ("fullPIERS" em versalete viraria outra sigla). */
+.cartao-calc__nome {
+  display: block; font-size: 12px; font-weight: 700;
+  color: var(--texto-forte); letter-spacing: .02em;
+}
+/* O cabecalho inteiro e um <button>: e o que faz "clicar no cartao" valer
+   tambem para teclado, sem reinventar foco. Reset para nao parecer botao. */
+.cartao-calc__cab {
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.cartao-calc__desc {
+  display: block; font-size: 11.5px; color: var(--texto);
+  margin-top: 6px; line-height: 1.5;
+}
+.cartao-calc__face-notas {
+  display: block; font-size: 11.5px; color: var(--texto);
+  margin-top: 6px; line-height: 1.6;
+}
+.cartao-calc__abrir {
+  display: block; text-align: right; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--verde-esc);
+  margin-top: 8px;
+}
+.cartao-calc__det { border-top: 1px solid var(--borda); margin-top: 10px; }
+.cartao-calc__ref { font-size: 11px; color: var(--texto-fraco); margin: 10px 0 0; }
 
 .sub-eixo {
   font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
@@ -344,7 +384,9 @@ button { font: inherit; color: inherit; }
   padding: 10px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
 }
 .piers { display: flex; align-items: center; gap: 8px; font-size: 11.5px; flex-wrap: wrap; }
-.piers__rot { font-weight: 700; color: var(--texto-forte); text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
+/* Sem text-transform: o rotulo e o nome "fullPIERS", e a grafia e parte do
+   nome -- em caixa alta viraria outra sigla (mesmo motivo do cartao-calc__nome). */
+.piers__rot { font-weight: 700; color: var(--texto-forte); font-size: 10px; letter-spacing: .05em; }
 .piers__item {
   border: 1px solid var(--borda-forte); border-radius: 10px; padding: 1px 8px;
   background: var(--branco); cursor: pointer; font-size: 11px;
@@ -696,6 +738,10 @@ button { font: inherit; color: inherit; }
   /* ---- estado ----------------------------------------------------------- */
   var dados = {};            // chave -> valor
   var blocoAtivo = "ident";
+  /* Cartao de calculadora com o detalhe aberto, ou null (D-35). Vive fora de
+     `dados`, como blocoAtivo e exameEdit: e estado de UI, nao dado da
+     paciente, e precisa sobreviver ao render(). */
+  var calcAberta = null;
   var painel = document.getElementById("painel");
   var trilho = document.getElementById("trilho");
 
@@ -931,18 +977,41 @@ button { font: inherit; color: inherit; }
 
   /* Calculadoras ficam num bloco proprio, nao no rodape de toda tela: o
      fullPIERS e um modelo de risco NA PRE-ECLAMPSIA, nao um escore geral, e
-     ocupava espaco em consultas onde nao se aplica. */
-  telas.calc = function () {
-    var h = '<h2 class="painel__titulo">Calculadoras</h2>' +
-      '<p class="painel__nota">Escores calculados a partir do que já foi preenchido nos outros blocos.</p>';
+     ocupava espaco em consultas onde nao se aplica.
 
+     Um cartao por calculadora, em grade, com o detalhe sob clique (D-35) --
+     pedido da medica, para caber mais de dez calculadoras. A face carrega o
+     resultado e TUDO que muda o significado dele: o asterisco da D-27, a
+     SpO2 assumida, o que falta preencher. O clique so revela detalhe.
 
+     Para acrescentar uma calculadora: uma entrada em CALCULADORAS, com a
+     D-25 valendo inteira -- so entra publicada e validada, conferida contra
+     a ferramenta oficial dos autores (a licao da D-27), e falta de insumo
+     nunca vira zero. Ver "Ao acrescentar uma calculadora" em
+     docs/convencoes.md.
+
+     ATENCAO: os campos que montar*() devolve (valor, desc, notasFace,
+     detalhes) entram no innerHTML SEM escape -- carregam <b>, <i> e o span
+     do asterisco de proposito. Dado digitado pela usuaria so pode entrar
+     neles passando por esc() na origem (e o que insumosPiers/montarFullPiers
+     ja fazem com os valores dos insumos e a lista do que falta). */
+  var CALCULADORAS = [
+    { id: "fullpiers", nome: "fullPIERS", montar: montarFullPiers },
+    /* HPP aguarda a especificacao (pendencia 5): quais fatores entram, de
+       quais variaveis saem, como pontuam. Vira cartao de verdade quando a
+       medica definir. */
+    { id: "hpp", nome: "Hemorragia pós-parto (HPP)", emPreparacao: true,
+      desc: "Aguarda a especificação — quais fatores entram, de quais " +
+        "variáveis saem e como pontuam." }
+  ];
+
+  function montarFullPiers() {
     /* Toda a leitura e conversao dos insumos mora em insumosPiers(), que a
-       exportacao tambem usa. A assuncao da SpO2 aparece marcada na linha e
-       rebaixa o nivel do cartao de confianca; nenhum outro insumo tem
-       imputacao automatica. */
+       exportacao tambem usa. A assuncao da SpO2 aparece marcada na linha do
+       insumo e na face do cartao; nenhum outro insumo tem imputacao
+       automatica. */
     var z = insumosPiers();
-    var spo2Imputada = z.spo2Imputada, spo2Usada = z.spo2Usada, spo2Num = z.spo2Num;
+    var spo2Imputada = z.spo2Imputada, spo2Usada = z.spo2Usada;
     var igCalc = z.igCalc, igInfTxt = z.igInfTxt, igSem = z.igSem;
     var crBruto = z.crBruto, crUnid = z.crUnid, crUmol = z.crUmol;
     var plt = z.plt, ast = z.ast, dorDisp = z.dorDisp;
@@ -981,17 +1050,11 @@ button { font: inherit; color: inherit; }
       return { i: i, tem: !!g, imputado: false, valor: ROTULO[g] || g };
     });
     var faltando = estado.filter(function (x) { return !x.tem; });
-    var medidos = estado.filter(function (x) { return x.tem && !x.imputado; }).length;
-
     var pode = z.pode, prob = z.prob;
 
     // Sem porteiro por 361: a medica determinou que a calculadora roda em todo
     // caso que tenha os dados. A pressuposicao de pre-eclampsia do modelo
-    // continua registrada, mas como ressalva do cartao, nao como bloqueio.
-    h += '<div class="secao"><div class="secao__titulo">fullPIERS</div>' +
-      '<p style="font-size:12px;margin:0 0 10px">Risco de desfecho materno adverso na ' +
-      "<b>pré-eclâmpsia</b>.</p>";
-
+    // continua registrada, mas como ressalva do detalhe, nao como bloqueio.
     var linhasPiers = "";
     estado.forEach(function (x) {
       var selo;
@@ -1007,13 +1070,13 @@ button { font: inherit; color: inherit; }
       linhasPiers += '<div class="linha-cond"><span class="linha-cond__rot">' +
         esc(x.i.n) + " " + cod(x.i.c) + "</span>" + selo + "</div>";
     });
-    h += grupoLinhas(linhasPiers);
-
-    /* Resultado e confianca num cartao so, em topicos. Eram duas caixas
-       empilhadas com tres paragrafos corridos -- quem esta atendendo nao le
-       paragrafo, varre. Cada ressalva virou um topico curto, e o nivel de
-       confianca virou selo ao lado do resultado, que e onde o olho ja esta. */
-    var cor, selo, valorTxt, topicos = [];
+    /* Face e detalhe do mesmo cartao. A regra da divisao: o que muda o
+       SIGNIFICADO do numero vai na face (sem calculo e o que falta, SpO2
+       assumida, o asterisco da D-27 com a versao curta da nota); o que e
+       detalhe -- insumo a insumo, ressalvas de validade, a nota completa,
+       referencia -- vai atras do clique. Esconder sinal custaria confianca
+       (D-14); esconder detalhe, nao. */
+    var cor, selo, valorTxt, notasFace = [], topicos = [];
     if (!pode) {
       cor = "ruim";
       selo = "Sem cálculo";
@@ -1024,13 +1087,20 @@ button { font: inherit; color: inherit; }
       if (dorDisp === null && quem.indexOf("Dor torácica") < 0 && quem.indexOf("Dispneia") < 0) {
         quem.push("dor torácica e/ou dispneia");
       }
-      topicos.push("<b>Falta preencher:</b> " + esc(quem.join(", ")));
+      /* Na face, nao no detalhe: "por que nao ha numero" nao pode custar um
+         clique. A lista sai INTEIRA -- resumir em "faltam 4" esconderia
+         justamente o que corrigir. */
+      notasFace.push("<b>Falta preencher:</b> " + esc(quem.join(", ")));
     } else {
       var f = faixaPiers(prob);
       cor = f.cor;
       selo = f.rot;
       valorTxt = (prob * 100).toFixed(prob < 0.1 ? 1 : 0).replace(".", ",") +
         '%<span class="cartao-calc__ast">*</span>';
+      notasFace.push("<b>*</b> IG alinhada à calculadora oficial (PRE-EMPT/UBC)");
+      if (spo2Imputada) {
+        notasFace.push("<b>SpO₂ assumida em 97%</b> — não medida");
+      }
       topicos.push("Faixas do artigo: <b>baixo</b> abaixo de 2,5% · <b>alto</b> a partir de 30%");
       if (spo2Imputada) {
         topicos.push("<b>SpO₂ assumida em 97%</b>, não medida — o erro cai para o lado tranquilizador");
@@ -1053,20 +1123,54 @@ button { font: inherit; color: inherit; }
         "<i>Lancet</i>. A IG mostrada acima é a da paciente e não muda");
     }
 
-    h += '<div class="cartao-calc cartao-calc--' + cor + '">' +
-      '<div class="cartao-calc__topo">' +
-      '<div><div class="cartao-calc__rot">Probabilidade de desfecho adverso</div>' +
-      '<div class="cartao-calc__valor">' + valorTxt + "</div></div>" +
-      '<span class="cartao-calc__nivel">' + esc(selo) + "</span></div>" +
-      '<ul class="cartao-calc__notas"><li>' + topicos.join("</li><li>") + "</li></ul>" +
-      "</div>";
+    return {
+      cor: cor, selo: selo, valor: valorTxt,
+      desc: "Probabilidade de desfecho materno adverso em 48 h na <b>pré-eclâmpsia</b>.",
+      notasFace: notasFace,
+      detalhes: grupoLinhas(linhasPiers) +
+        '<ul class="cartao-calc__notas"><li>' + topicos.join("</li><li>") + "</li></ul>" +
+        '<p class="cartao-calc__ref">von Dadelszen et al., <i>Lancet</i>, 2011 · ' +
+        "calculadora oficial: PRE-EMPT/UBC</p>"
+    };
+  }
 
-    h += "</div>";
+  telas.calc = function () {
+    var h = '<h2 class="painel__titulo">Calculadoras</h2>' +
+      '<p class="painel__nota">Escores calculados a partir do que já foi preenchido nos outros ' +
+      "blocos. Cada cartão mostra o resultado; clique para abrir os insumos e as ressalvas.</p>" +
+      '<div class="calc-grade">';
 
-    h += '<div class="secao"><div class="secao__titulo">Hemorragia pós-parto (HPP)</div>' +
-      '<p style="font-size:12px;color:#93a2b1;margin:0">Em preparação.</p></div>';
+    CALCULADORAS.forEach(function (c) {
+      if (c.emPreparacao) {
+        h += '<div class="cartao-calc cartao-calc--prep">' +
+          '<span class="cartao-calc__topo">' +
+          '<span><span class="cartao-calc__nome">' + esc(c.nome) + "</span>" +
+          '<span class="cartao-calc__valor">—</span></span>' +
+          '<span class="cartao-calc__nivel">Em preparação</span></span>' +
+          '<span class="cartao-calc__desc">' + c.desc + "</span></div>";
+        return;
+      }
+      var m = c.montar();
+      var aberto = calcAberta === c.id;
+      h += '<div class="cartao-calc cartao-calc--' + m.cor +
+        (aberto ? " cartao-calc--aberto" : "") + '">' +
+        '<button type="button" class="cartao-calc__cab" data-calc-abrir="' + c.id +
+        '" aria-expanded="' + aberto + '">' +
+        '<span class="cartao-calc__topo">' +
+        '<span><span class="cartao-calc__nome">' + esc(c.nome) + "</span>" +
+        '<span class="cartao-calc__valor">' + m.valor + "</span></span>" +
+        '<span class="cartao-calc__nivel">' + esc(m.selo) + "</span></span>" +
+        '<span class="cartao-calc__desc">' + m.desc + "</span>" +
+        (m.notasFace.length
+          ? '<span class="cartao-calc__face-notas">' + m.notasFace.join("<br>") + "</span>"
+          : "") +
+        '<span class="cartao-calc__abrir">' + (aberto ? "fechar detalhes ▴" : "detalhes ▾") + "</span>" +
+        "</button>" +
+        (aberto ? '<div class="cartao-calc__det">' + m.detalhes + "</div>" : "") +
+        "</div>";
+    });
 
-    return h;
+    return h + "</div>";
   };
 
 
@@ -2109,7 +2213,10 @@ button { font: inherit; color: inherit; }
 
   function render() {
     var ativo = document.activeElement;
-    var foco = ativo && ativo.dataset ? (ativo.dataset.k || ativo.dataset.gl || ativo.dataset.ex) : null;
+    // calcAbrir entra na lista: sem ele, abrir um cartao de calculadora pelo
+    // teclado jogava o foco para o body -- o botao clicado morre com o
+    // innerHTML e o Tab recomecava do topo do documento.
+    var foco = ativo && ativo.dataset ? (ativo.dataset.k || ativo.dataset.gl || ativo.dataset.ex || ativo.dataset.calcAbrir) : null;
     var pos = null;
     // type="date" e "number" lancam ao ler selectionStart. Nenhum campo que
     // dispara redesenho pode ser "number" (ver campoNum), mas o guarda fica:
@@ -2133,7 +2240,7 @@ button { font: inherit; color: inherit; }
     document.getElementById("topo-idade").textContent = idNasc === null ? "—" : idNasc + " anos";
 
     if (foco) {
-      var novo = painel.querySelector('[data-k="' + foco + '"], [data-gl="' + foco + '"], [data-ex="' + foco + '"]');
+      var novo = painel.querySelector('[data-k="' + foco + '"], [data-gl="' + foco + '"], [data-ex="' + foco + '"], [data-calc-abrir="' + foco + '"]');
       if (novo) {
         // preventScroll: o elemento e um NO NOVO (innerHTML inteiro trocou),
         // entao o navegador nao sabe que ele ocupa a mesma posicao de antes e
@@ -3116,6 +3223,13 @@ button { font: inherit; color: inherit; }
 
     if (t.dataset.bloco) { mudarBloco(t.dataset.bloco); return; }
     if (t.dataset.irCalc) { mudarBloco("calc"); return; }
+
+    // cartao de calculadora: abre/fecha o detalhe (D-35). Um aberto por vez,
+    // no molde do exameEdit -- abrir outro fecha o anterior.
+    if (t.dataset.calcAbrir) {
+      calcAberta = calcAberta === t.dataset.calcAbrir ? null : t.dataset.calcAbrir;
+      render(); return;
+    }
 
     // controle de 3 estados: clicar no selecionado volta para "não avaliado"
     if (t.parentElement && t.parentElement.dataset.tri) {
