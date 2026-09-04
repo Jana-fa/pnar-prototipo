@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PNAR — consulta de anestesiologia: proposta de tela</title>
+</head>
+<body>
+<style>
+/* ==========================================================================
+   AGMEJC — espaço PNAR. Consulta de anestesiologia (D-38).
+
+   TELA PRÓPRIA, não um bloco da 1ª consulta: outro atendimento, outro
+   momento, OUTRA EQUIPE MÉDICA. O que ela compartilha com a 1ª consulta é o
+   registro de campos (docs/campos.yaml), os domínios, o cabeçalho de percurso
+   e as convenções (docs/convencoes.md). O resto é próprio — inclusive este
+   CSS, que repete a paleta de propósito: duas telas independentes que se
+   parecem, e não uma tela que depende do arquivo da outra.
+   ========================================================================== */
+:root, :root[data-theme="dark"], :root[data-theme="light"] { color-scheme: light; }
+
+:root {
+  --azul: #2a3f54; --verde: #1abb9c; --verde-esc: #16a085; --verde-fraco: #eafaf6;
+  --vermelho: #d04b3f; --vermelho-fraco: #fdeeec; --ambar: #d9a441;
+  --ambar-fraco: #fdf6e7; --fundo: #f7f7f7; --branco: #fff; --borda: #dfe4ea;
+  --borda-forte: #c7d0d9; --texto: #5a6b7d; --texto-forte: #2a3f54;
+  --texto-fraco: #93a2b1;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--fundo); color: var(--texto); }
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", sans-serif;
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; }
+
+.tela { max-width: 1120px; margin: 0 auto; padding: 16px; }
+.topo {
+  background: var(--azul); color: #fff; border-radius: 4px 4px 0 0;
+  padding: 12px 18px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+}
+.topo h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.topo__sub { font-size: 11.5px; opacity: .75; }
+.topo__id { margin-left: auto; display: flex; gap: 18px; font-size: 12px; }
+.topo__id b { display: block; font-size: 10.5px; opacity: .7; font-weight: 400; }
+
+.corpo { background: var(--branco); border: 1px solid var(--borda); border-top: 0; }
+.trilho { display: flex; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--borda); flex-wrap: wrap; }
+.trilho button {
+  border: 1px solid transparent; border-bottom: 0; background: none; cursor: pointer;
+  padding: 7px 12px; font-size: 12px; color: var(--texto); border-radius: 3px 3px 0 0;
+}
+.trilho button.ativo {
+  background: var(--branco); border-color: var(--borda); color: var(--texto-forte);
+  font-weight: 600; margin-bottom: -1px;
+}
+.trilho button .marca { color: var(--verde); font-weight: 700; }
+.painel { padding: 18px; min-height: 380px; }
+.painel__titulo { margin: 0 0 4px; font-size: 15px; color: var(--texto-forte); }
+.painel__nota { margin: 0 0 16px; font-size: 11.5px; color: var(--texto-fraco); }
+
+.secao { margin-bottom: 18px; }
+.secao__titulo {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--texto-fraco); border-bottom: 1px solid var(--borda);
+  padding-bottom: 5px; margin-bottom: 10px; font-weight: 600;
+}
+.campos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.campo--p { grid-column: span 1; } .campo--m { grid-column: span 2; }
+.campo--g { grid-column: span 3; } .campo--full { grid-column: 1 / -1; }
+.campo label { display: block; font-size: 11.5px; color: var(--texto-forte); margin-bottom: 4px; }
+.campo input, .campo textarea {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--borda-forte);
+  border-radius: 3px; font: inherit; background: var(--branco); color: var(--texto);
+}
+.campo textarea { min-height: 62px; resize: vertical; }
+.campo--derivado input { background: var(--fundo); color: var(--texto-fraco); }
+.selo {
+  font-size: 9.5px; background: var(--verde-fraco); color: var(--verde-esc);
+  border-radius: 2px; padding: 1px 5px; font-weight: 600;
+}
+.campo__dica { font-size: 10.5px; color: var(--texto-fraco); }
+
+.linhas { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 22px; }
+.linha {
+  display: grid; grid-template-columns: minmax(0, 300px) auto; align-items: center;
+  gap: 10px; padding: 5px 0; border-bottom: 1px dotted var(--borda);
+}
+.linha__rot { color: var(--texto-forte); font-size: 12px; }
+.linha__rot small { display: block; color: var(--texto-fraco); font-size: 10.5px; }
+.sub-eixo {
+  grid-column: 1 / -1; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--texto-fraco); font-weight: 600;
+  margin: 10px 0 2px;
+}
+.chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.atalho {
+  border: 1px solid var(--borda-forte); background: var(--branco); cursor: pointer;
+  padding: 4px 10px; border-radius: 3px; font-size: 11.5px; color: var(--texto);
+}
+.atalho:hover { background: var(--verde-fraco); }
+.atalho.feito { background: var(--verde); color: #fff; border-color: var(--verde); }
+.atalho.feito:hover { background: var(--verde-esc); }
+.atalho.ruim { background: var(--vermelho); color: #fff; border-color: var(--vermelho); }
+
+.condicional {
+  border-left: 3px solid var(--verde); padding: 8px 0 4px 12px; margin: 6px 0 10px;
+  grid-column: 1 / -1;
+}
+.condicional.orfao { border-left-color: var(--ambar); }
+.aviso {
+  display: flex; gap: 8px; padding: 9px 12px; border-radius: 3px;
+  font-size: 11.5px; margin: 8px 0;
+}
+.aviso--atencao { background: var(--ambar-fraco); color: #8a6414; }
+.aviso--info { background: var(--verde-fraco); color: var(--verde-esc); }
+.aviso--erro { background: var(--vermelho-fraco); color: #8f2f24; }
+.aviso b { display: block; }
+
+.acoes {
+  display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--borda);
+  background: var(--fundo); border-radius: 0 0 4px 4px; flex-wrap: wrap;
+}
+.botao {
+  border: 1px solid var(--borda-forte); background: var(--branco); cursor: pointer;
+  padding: 7px 14px; border-radius: 3px; font-size: 12.5px;
+}
+.botao--principal { background: var(--verde); border-color: var(--verde); color: #fff; font-weight: 600; }
+.botao--principal:disabled { opacity: .6; cursor: default; }
+.contagem { margin-left: auto; font-size: 11.5px; color: var(--texto-fraco); align-self: center; }
+
+.modal {
+  display: none; position: fixed; inset: 0; background: rgba(42, 63, 84, .45);
+  align-items: center; justify-content: center; padding: 18px; z-index: 40;
+}
+.modal__caixa {
+  background: var(--branco); border-radius: 4px; max-width: 620px; width: 100%;
+  max-height: 88vh; overflow: auto; padding: 18px;
+}
+.modal__caixa h2 { margin: 0 0 12px; font-size: 15px; color: var(--texto-forte); }
+.modal__caixa textarea {
+  width: 100%; min-height: 300px; font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px; padding: 10px; border: 1px solid var(--borda-forte); border-radius: 3px;
+}
+.notas { margin: 0; padding-left: 18px; font-size: 12px; }
+.notas li { margin-bottom: 4px; }
+
+@media (max-width: 900px) {
+  .campos { grid-template-columns: repeat(2, 1fr); }
+  .campo--g, .campo--m { grid-column: 1 / -1; }
+  .linhas { grid-template-columns: 1fr; }
+  .linha { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="tela">
+  <div class="topo">
+    <div>
+      <h1>Consulta de anestesiologia — PNAR</h1>
+      <div class="topo__sub">Avaliação pré-anestésica · pré-natal de alto risco</div>
+    </div>
+    <div class="topo__id">
+      <div><b>Paciente</b><span id="topo-nome">—</span></div>
+      <div><b>Prontuário</b><span id="topo-pront">—</span></div>
+      <div><b>Percurso</b><span id="topo-percurso">não vinculado</span></div>
+    </div>
+  </div>
+  <div class="corpo">
+    <div class="trilho" id="trilho"></div>
+    <div class="painel" id="painel"></div>
+  </div>
+  <div class="acoes">
+    <button type="button" class="botao botao--principal" id="finalizar">Finalizar consulta</button>
+    <button type="button" class="botao" id="rascunho">Salvar rascunho</button>
+    <span class="contagem" id="contagem"></span>
+  </div>
+</div>
+
+<div class="modal" id="modal-salvo">
+  <div class="modal__caixa">
+    <h2 id="salvo-titulo"></h2>
+    <div id="salvo-corpo"></div>
+    <div class="acoes" style="background:none;border:0;padding:12px 0 0">
+      <button type="button" class="botao botao--principal" id="salvo-exportar">Exportar atendimento</button>
+      <button type="button" class="botao" id="salvo-fechar">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal-export">
+  <div class="modal__caixa">
+    <h2>Texto para colar na evolução do AGHU</h2>
+    <textarea id="export-texto" readonly></textarea>
+    <div class="acoes" style="background:none;border:0;padding:12px 0 0">
+      <button type="button" class="botao botao--principal" id="export-copiar">Copiar texto</button>
+      <button type="button" class="botao" id="export-fechar">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ======================================================================
+   * Consulta de anestesiologia do PNAR — D-38.
+   *
+   * As 42 variáveis vieram da planilha da médica (2026-09-03), transcritas
+   * em docs/diretrizes/01-anestesiologia-precisa.md. As regras que valem
+   * aqui são as mesmas da 1ª consulta, e não por estilo:
+   *
+   *   D-06  toda pergunta binária tem TRÊS estados. "Não perguntei" nunca
+   *         vira "Não" — são 30 das 42 variáveis desta tela.
+   *   D-10  nenhuma inferência clínica entre campos. Cálculo pode (IMC).
+   *   D-14  sinalizar, nunca esconder.
+   *   D-16  campo que já foi preenchido não some sozinho: vira órfão visível
+   *         com descarte explícito.
+   *   D-25  a tela não interpreta. A classificação de risco de HPP é
+   *         DIGITADA, nunca calculada a partir dos fatores ao lado.
+   *   D-30  a gravação é cega: a chave pública só INSERE, o protocolo nasce
+   *         aqui e `Prefer: return=minimal` é obrigatório.
+   * ====================================================================== */
+
+  var SUPABASE = {
+    url: "https://fsvbauskdlwigtqpldtz.supabase.co",
+    /* Chave PUBLICÁVEL (equivale a anon). Em texto claro por desenho: a
+       página é pública e a proteção mora no banco — RLS com política só de
+       INSERT, em docs/backend/supabase.sql. */
+    anonKey: "sb_publishable_CFV67CAZsL-KPgAshTAABA_knmT2vHr"
+  };
+
+  /* Contrato desta tela: chave → [coluna, tipo]. Cópia do registro dentro do
+     HTML, conferida por scripts/gerar_contrato.py, que FALHA se divergir.
+     Cada tela carrega o SEU mapa (D-38). */
+  var CONTRATO_ANESTESIA = {
+    "alerg": [["alergia_medicamentosa","estado_clinico"]],
+    "alergqual": [["alergia_medicamentosa_qual","text"]],
+    "anestprev": [["anestesia_previa","estado_clinico"]],
+    "asa": [["asa","classificacao_asa"]],
+    "atendimento_anterior": [["atendimento_anterior_protocolo","uuid"]],
+    "compprev": [["complicacao_anestesica_previa","estado_clinico"]],
+    "compqual": [["complicacao_anestesica_qual","text"]],
+    "conhecia": [["conhecia_analgesia","estado_clinico"]],
+    "contraneuro": [["contraindicacao_neuroaxial","estado_clinico"]],
+    "data_consulta": [["data_consulta","date"]],
+    "deseja": [["deseja_analgesia","estado_clinico"]],
+    "elegivel": [["elegivel_analgesia_parto","estado_clinico"]],
+    "encamcardio": [["encaminhamento_cardiologia","estado_clinico"]],
+    "estatura": [["estatura_cm","numeric"]],
+    "ferrit": [["ferritina","numeric"]],
+    "fibrin": [["fibrinogenio","numeric"]],
+    "gestacao_id": [["gestacao_id","uuid"]],
+    "hb": [["hemoglobina","numeric"]],
+    "hipmal": [["fam_hipertermia_maligna","estado_clinico"]],
+    "hpp_acret": [["acretismo_suspeita","estado_clinico"]],
+    "hpp_anticoag": [["uso_anticoagulantes","estado_clinico"]],
+    "hpp_coagul": [["coagulopatia","estado_clinico"]],
+    "hpp_gemel": [["gestacao_gemelar","estado_clinico"]],
+    "hpp_hppant": [["hpp_anterior","estado_clinico"]],
+    "hpp_macros": [["macrossomia_suspeita","estado_clinico"]],
+    "hpp_mioma": [["miomatose_importante","estado_clinico"]],
+    "hpp_multip": [["multiparidade","estado_clinico"]],
+    "hpp_plaqtp": [["plaquetopenia","estado_clinico"]],
+    "hpp_polidr": [["polidramnio","estado_clinico"]],
+    "hpp_pprev": [["placenta_previa","estado_clinico"]],
+    "hpp_transf": [["transfusao_previa","estado_clinico"]],
+    "ig": [["ig_semanas","integer"]],
+    "mallam": [["mallampati","mallampati"]],
+    "material": [["material_educativo","estado_clinico"]],
+    "mudou": [["mudou_opiniao","estado_clinico"]],
+    "nome": [["nome","text"]],
+    "obs": [["observacoes","text"]],
+    "orient": [["orientacao_analgesia","estado_clinico"]],
+    "peso": [["peso_kg","numeric"]],
+    "protese": [["protese_dentaria","estado_clinico"]],
+    "prontuario": [["prontuario","text"]],
+    "reservasang": [["reserva_sangue","estado_clinico"]],
+    "riscohpp": [["risco_hpp","risco_hpp"]],
+    "tcle": [["tcle_analgesia","estado_clinico"]],
+    "viadificil": [["risco_via_aerea_dificil","estado_clinico"]]
+  };
+
+  /* Só os domínios que ESTA tela usa. O gerador falha se declarar a mais. */
+  var CONTRATO_DOMINIOS = {
+    "classificacao_asa": ["asa_1","asa_2","asa_3","asa_4"],
+    "estado_clinico": ["sim","nao","nao_sabe"],
+    "mallampati": ["mp_1","mp_2","mp_3","mp_4"],
+    "risco_hpp": ["baixo","moderado","alto"]
+  };
+
+  var APELIDOS = { estado_clinico: { nsabe: "nao_sabe" } };
+
+  /* ---- estado ---------------------------------------------------------- */
+  function hojeLocal() {
+    var d = new Date();
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) +
+      "-" + ("0" + d.getDate()).slice(-2);
+  }
+  var dados = { data_consulta: hojeLocal() };
+  var blocoAtivo = "ident";
+  var painel = document.getElementById("painel");
+  var trilho = document.getElementById("trilho");
+  var ultimoProtocolo = null;
+
+  function set(k, v) { if (v === null || v === undefined || v === "") { delete dados[k]; } else { dados[k] = v; } }
+  function get(k) { return dados[k]; }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) { return crypto.randomUUID(); }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0;
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+  function fmtData(iso) {
+    if (!iso) { return ""; }
+    var p = String(iso).split("-");
+    return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
+  }
+
+  /* ---- vocabulário ------------------------------------------------------ */
+  /* Três estados, sempre. Clicar no selecionado devolve a "não perguntei". */
+  var SIM_NAO_SABE = [
+    { v: "sim", r: "Sim" }, { v: "nao", r: "Não" }, { v: "nsabe", r: "Não sabe" }
+  ];
+  var ASA = [
+    { v: "asa_1", r: "ASA I" }, { v: "asa_2", r: "ASA II" },
+    { v: "asa_3", r: "ASA III" }, { v: "asa_4", r: "ASA IV" }
+  ];
+  var MALLAMPATI = [
+    { v: "mp_1", r: "I" }, { v: "mp_2", r: "II" },
+    { v: "mp_3", r: "III" }, { v: "mp_4", r: "IV" }
+  ];
+  /* "alto" recebe destaque vermelho: é sinalização do que pede conduta, do
+     mesmo jeito que "reagente" na 1ª consulta — nunca um cálculo da tela. */
+  var RISCO_HPP = [
+    { v: "baixo", r: "Baixo" }, { v: "moderado", r: "Moderado" },
+    { v: "alto", r: "Alto", ruim: true }
+  ];
+
+  /* Os doze fatores de risco de HPP da planilha. Cada um é pergunta própria
+     de três estados; nenhum deles alimenta a classificação (D-25). */
+  var FATORES_HPP = [
+    { id: "hppant", nome: "Hemorragia pós-parto anterior" },
+    { id: "transf", nome: "Transfusão sanguínea prévia" },
+    { id: "pprev", nome: "Placenta prévia" },
+    { id: "acret", nome: "Suspeita de acretismo placentário" },
+    { id: "mioma", nome: "Miomatose uterina importante" },
+    { id: "gemel", nome: "Gestação gemelar" },
+    { id: "polidr", nome: "Polidrâmnio" },
+    { id: "macros", nome: "Macrossomia fetal suspeita" },
+    { id: "multip", nome: "Multiparidade" },
+    { id: "coagul", nome: "Coagulopatia" },
+    { id: "anticoag", nome: "Uso de anticoagulantes" },
+    { id: "plaqtp", nome: "Plaquetopenia" }
+  ];
+
+  var BLOCOS = [
+    { id: "ident", nome: "Identificação" },
+    { id: "aval", nome: "Avaliação anestésica" },
+    { id: "via", nome: "Via aérea" },
+    { id: "hpp", nome: "Risco de HPP" },
+    { id: "plano", nome: "Planejamento" },
+    { id: "educ", nome: "Educação" }
+  ];
+
+  /* ---- fábricas de campo ------------------------------------------------ */
+  function tri(k, opcoes) {
+    var v = get(k);
+    return '<div class="chips" data-tri="' + k + '">' + opcoes.map(function (o) {
+      var on = v === o.v;
+      var cls = "atalho" + (on ? (o.ruim ? " ruim" : " feito") : "");
+      return '<button type="button" class="' + cls + '" data-v="' + esc(o.v) + '">' +
+        esc(o.r) + "</button>";
+    }).join("") + "</div>";
+  }
+  function linha(rotulo, k, opcoes) {
+    return '<div class="linha"><span class="linha__rot">' + rotulo + "</span>" +
+      tri(k, opcoes || SIM_NAO_SABE) + "</div>";
+  }
+  function campoTexto(k, r, t, tipo) {
+    return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + "</label>" +
+      '<input type="' + (tipo || "text") + '" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
+  }
+  /* Numérico sem type="number": o campo dispara redesenho e o navegador
+     proíbe ler selectionStart em type="number" — o cursor pulava para o
+     início e os dígitos entravam ao contrário. Mesma razão da 1ª consulta. */
+  function campoNum(k, r, dica) {
+    return '<div class="campo campo--p"><label>' + esc(r) + "</label>" +
+      '<input type="text" inputmode="decimal" data-num data-k="' + k +
+      '" value="' + esc(get(k) || "") + '">' +
+      (dica ? '<span class="campo__dica">' + esc(dica) + "</span>" : "") + "</div>";
+  }
+  function campoData(k, r) {
+    return '<div class="campo campo--p"><label>' + esc(r) + "</label>" +
+      '<input type="date" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
+  }
+  function campoArea(k, r) {
+    return '<div class="campo campo--full"><label>' + esc(r) + "</label>" +
+      '<textarea data-k="' + k + '">' + esc(get(k) || "") + "</textarea></div>";
+  }
+  function campoTri(k, r, opcoes, t) {
+    return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + "</label>" +
+      "<div>" + tri(k, opcoes) + "</div></div>";
+  }
+  /* Condicional com órfão visível: se a resposta que abriu o campo mudar, o
+     texto NÃO some — fica com aviso e descarte explícito (D-16). */
+  function condicional(chavePai, valorAbre, chaveDep, conteudo) {
+    var aberto = get(chavePai) === valorAbre;
+    var orfao = !aberto && !!get(chaveDep);
+    if (!aberto && !orfao) { return ""; }
+    if (!orfao) { return '<div class="condicional">' + conteudo + "</div>"; }
+    return '<div class="condicional orfao">' +
+      '<div class="aviso aviso--atencao"><span>⚠</span><div>' +
+      "<b>Isto foi preenchido e a resposta mudou.</b>" +
+      "O texto continua aqui — corrija a resposta ou descarte, mas o sistema não apaga sozinho." +
+      '<div style="margin-top:6px"><button type="button" class="atalho" data-descartar="' +
+      chaveDep + '">Descartar o texto</button></div></div></div>' + conteudo + "</div>";
+  }
+
+  /* ---- telas ------------------------------------------------------------ */
+  var telas = {};
+
+  telas.ident = function () {
+    var h = '<h2 class="painel__titulo">Identificação e percurso</h2>' +
+      '<p class="painel__nota">O prontuário identifica a paciente. A chave de continuidade ' +
+      "vem da exportação do atendimento anterior — cole-a para amarrar esta consulta ao percurso.</p>" +
+      '<div class="campos">' +
+      campoTexto("nome", "Nome da paciente", "g") +
+      campoTexto("prontuario", "Nº de prontuário", "p") +
+      campoData("data_consulta", "Data da consulta") +
+      "</div>";
+
+    h += '<div class="secao" style="margin-top:18px"><div class="secao__titulo">Chave de continuidade</div>' +
+      '<p class="painel__nota">Cole aqui o trecho <i>“Chave de continuidade PNAR · gestação … · atendimento …”</i> ' +
+      "que sai no fim da exportação da 1ª consulta. Sem ela o atendimento grava do mesmo jeito — " +
+      "perder a consulta seria pior —, e fica sem ligação com o percurso da gestação.</p>" +
+      '<div class="campos">' +
+      '<div class="campo campo--full"><label>Colar a chave</label>' +
+      '<input type="text" id="colar-chave" placeholder="Chave de continuidade PNAR · gestação … · atendimento …"></div>' +
+      "</div>" +
+      '<div class="campos" style="margin-top:10px">' +
+      campoTexto("gestacao_id", "Gestação (uuid)", "m") +
+      campoTexto("atendimento_anterior", "Protocolo do atendimento anterior (uuid)", "m") +
+      "</div>";
+    if (!get("gestacao_id")) {
+      h += '<div class="aviso aviso--atencao"><span>⚠</span><div>' +
+        "<b>Sem chave de continuidade.</b>Esta consulta vai gravar solta: não dá para " +
+        "ligá-la à gestação nem aos exames já registrados." +
+        "</div></div>";
+    }
+    return h + "</div>";
+  };
+
+  /* Uma so definicao do IMC, usada na tela, na gravacao e na exportacao: tres
+     copias da mesma conta divergem, e aqui o que diverge e um numero clinico. */
+  function imcDe(peso, alt) {
+    if (isNaN(peso) || isNaN(alt) || !alt) { return ""; }
+    return (peso / Math.pow(alt / 100, 2)).toFixed(1);
+  }
+  function num(k) { return parseFloat(String(get(k) || "").replace(",", ".")); }
+
+  telas.aval = function () {
+    var peso = num("peso"), alt = num("estatura");
+    var h = '<h2 class="painel__titulo">Avaliação anestésica</h2>' +
+      '<p class="painel__nota">Peso, altura e idade gestacional são medidas <b>de hoje</b> — ' +
+      "não vêm da 1ª consulta, porque mudam entre um atendimento e outro.</p>";
+
+    /* O campo do IMC existe SEMPRE, mesmo vazio. Aparecer e sumir conforme o
+       peso obrigaria a redesenhar a tela a cada tecla — e redesenhar enquanto
+       alguem digita destroi o campo seguinte antes de ele receber o valor.
+       Foi o defeito que a suite pegou na primeira versao desta tela. */
+    h += '<div class="secao"><div class="secao__titulo">Medidas</div><div class="campos">' +
+      campoNum("ig", "Idade gestacional (semanas)") +
+      campoNum("peso", "Peso (kg)") +
+      campoNum("estatura", "Altura (cm)") +
+      '<div class="campo campo--p campo--derivado"><label>IMC <span class="selo">calc</span></label>' +
+      '<input id="imc-campo" value="' + esc(imcDe(peso, alt)) +
+      '" readonly placeholder="peso e altura"></div>' +
+      "</div></div>";
+
+    h += '<div class="secao"><div class="secao__titulo">Estado físico</div><div class="campos">' +
+      campoTri("asa", "Classificação ASA", ASA, "g") + "</div></div>";
+
+    h += '<div class="secao"><div class="secao__titulo">Antecedentes anestésicos</div>' +
+      '<div class="linhas">' +
+      linha("História de anestesia prévia", "anestprev") +
+      linha("Complicação anestésica prévia", "compprev") +
+      condicional("compprev", "sim", "compqual",
+        '<div class="campos">' + campoTexto("compqual", "Qual complicação anestésica", "full") + "</div>") +
+      linha('História familiar de hipertermia maligna<small>pergunta sobre a família, não sobre a paciente</small>', "hipmal") +
+      linha("Alergia medicamentosa", "alerg") +
+      condicional("alerg", "sim", "alergqual",
+        '<div class="campos">' + campoTexto("alergqual", "Qual alergia", "full") + "</div>") +
+      "</div></div>";
+    return h;
+  };
+
+  telas.via = function () {
+    return '<h2 class="painel__titulo">Via aérea</h2>' +
+      '<p class="painel__nota">O risco de via aérea difícil é <b>julgamento de quem examinou</b>, ' +
+      "digitado — a tela não o deduz do Mallampati nem da prótese.</p>" +
+      '<div class="secao"><div class="campos">' +
+      campoTri("mallam", "Mallampati", MALLAMPATI, "m") + "</div></div>" +
+      '<div class="secao"><div class="linhas">' +
+      linha("Prótese dentária", "protese") +
+      linha("Risco de via aérea difícil", "viadificil") +
+      "</div></div>";
+  };
+
+  telas.hpp = function () {
+    var h = '<h2 class="painel__titulo">Risco de hemorragia pós-parto</h2>' +
+      '<p class="painel__nota">Os fatores abaixo são coletados; a classificação do risco é ' +
+      "<b>respondida por quem avalia</b>. A tela não a calcula a partir deles — isso exigiria " +
+      "instrumento publicado e validado, que ainda não foi implementado.</p>";
+
+    h += '<div class="secao"><div class="secao__titulo">Fatores</div><div class="linhas">';
+    FATORES_HPP.forEach(function (f) { h += linha(esc(f.nome), "hpp_" + f.id); });
+    h += "</div></div>";
+
+    h += '<div class="secao"><div class="secao__titulo">Laboratório</div><div class="campos">' +
+      campoNum("hb", "Hemoglobina (g/dL)") +
+      campoNum("ferrit", "Ferritina (ng/mL)") +
+      campoNum("fibrin", "Fibrinogênio (mg/dL)", "quando disponível") +
+      "</div></div>";
+
+    h += '<div class="secao"><div class="secao__titulo">Classificação</div><div class="campos">' +
+      campoTri("riscohpp", "Classificação do risco para hemorragia pós-parto", RISCO_HPP, "g") +
+      "</div>" +
+      '<div class="aviso aviso--info"><span>i</span><div>' +
+      "<b>Esta resposta é sua, não do sistema.</b>Os fatores acima ficam registrados como foram " +
+      "respondidos; nenhum escore é somado por trás." +
+      "</div></div></div>";
+    return h;
+  };
+
+  telas.plano = function () {
+    return '<h2 class="painel__titulo">Planejamento anestésico</h2>' +
+      '<p class="painel__nota">Condutas definidas nesta avaliação.</p>' +
+      '<div class="secao"><div class="linhas">' +
+      linha("Elegível para analgesia de parto", "elegivel") +
+      linha("Contraindicação ao bloqueio neuroaxial", "contraneuro") +
+      linha("Reserva de sangue recomendada", "reservasang") +
+      linha("Encaminhamento para cardiologia", "encamcardio") +
+      "</div></div>";
+  };
+
+  telas.educ = function () {
+    return '<h2 class="painel__titulo">Educação e consentimento</h2>' +
+      '<p class="painel__nota">O que foi informado à paciente e o que ela decidiu.</p>' +
+      '<div class="secao"><div class="linhas">' +
+      linha("Recebeu orientação sobre analgesia de parto", "orient") +
+      linha("Recebeu material educativo", "material") +
+      linha("Conhecia analgesia de parto previamente", "conhecia") +
+      linha("Deseja analgesia durante o trabalho de parto", "deseja") +
+      linha("Mudou de opinião após a consulta", "mudou") +
+      linha("Assinou TCLE para analgesia de parto", "tcle") +
+      "</div></div>" +
+      '<div class="secao"><div class="campos">' + campoArea("obs", "Observações da avaliação") + "</div></div>";
+  };
+
+  /* ---- render ----------------------------------------------------------- */
+  function render() {
+    trilho.innerHTML = BLOCOS.map(function (b) {
+      var n = Object.keys(dados).filter(function (k) { return chaveDoBloco(k) === b.id; }).length;
+      return '<button type="button" data-bloco="' + b.id + '"' +
+        (blocoAtivo === b.id ? ' class="ativo"' : "") + ">" + esc(b.nome) +
+        (n ? ' <span class="marca">' + n + "</span>" : "") + "</button>";
+    }).join("");
+    painel.innerHTML = telas[blocoAtivo]();
+    document.getElementById("topo-nome").textContent = get("nome") || "—";
+    document.getElementById("topo-pront").textContent = get("prontuario") || "—";
+    document.getElementById("topo-percurso").textContent =
+      get("gestacao_id") ? "vinculado" : "não vinculado";
+    document.getElementById("contagem").textContent =
+      Object.keys(dados).length + " campo(s) preenchido(s)";
+  }
+
+  var MAPA_BLOCO = {
+    ident: ["nome", "prontuario", "data_consulta", "gestacao_id", "atendimento_anterior"],
+    aval: ["ig", "peso", "estatura", "asa", "anestprev", "compprev", "compqual",
+           "hipmal", "alerg", "alergqual"],
+    via: ["mallam", "protese", "viadificil"],
+    plano: ["elegivel", "contraneuro", "reservasang", "encamcardio"],
+    educ: ["orient", "material", "conhecia", "deseja", "mudou", "tcle", "obs"]
+  };
+  function chaveDoBloco(k) {
+    if (k.indexOf("hpp_") === 0 || k === "hb" || k === "ferrit" ||
+        k === "fibrin" || k === "riscohpp") { return "hpp"; }
+    for (var b in MAPA_BLOCO) {
+      if (MAPA_BLOCO[b].indexOf(k) >= 0) { return b; }
+    }
+    return null;
+  }
+
+  /* ---- conversão e gravação --------------------------------------------- */
+  function paraDominio(tipo, v) {
+    var s = String(v).normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    var a = APELIDOS[tipo];
+    return (a && a[s]) || s;
+  }
+  /* Devolve {v} ou {erro} — nunca um valor "mais ou menos". O que a tela não
+     souber converter NÃO é gravado, não cancela o atendimento, e o popup diz
+     qual campo ficou de fora. */
+  function converterValor(tipo, v) {
+    if (CONTRATO_DOMINIOS[tipo]) {
+      var d = paraDominio(tipo, v);
+      if (CONTRATO_DOMINIOS[tipo].indexOf(d) < 0) {
+        return { erro: "“" + v + "” não é valor de " + tipo };
+      }
+      return { v: d };
+    }
+    if (tipo === "integer") {
+      var n = parseInt(String(v).replace(",", "."), 10);
+      return isNaN(n) ? { erro: "“" + v + "” não é inteiro" } : { v: n };
+    }
+    if (tipo === "numeric") {
+      var f = parseFloat(String(v).replace(",", "."));
+      return isNaN(f) ? { erro: "“" + v + "” não é número" } : { v: f };
+    }
+    if (tipo === "uuid") {
+      var u = String(v).trim().toLowerCase();
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(u)
+        ? { v: u } : { erro: "“" + v + "” não é um identificador válido" };
+    }
+    return { v: String(v) };
+  }
+
+  function montarRegistro(protocolo) {
+    var linha = {}, problemas = [], semColuna = [];
+    Object.keys(dados).forEach(function (k) {
+      var c = CONTRATO_ANESTESIA[k], v = dados[k];
+      if (v === "" || v === null || v === undefined) { return; }
+      if (!c) { semColuna.push(k); return; }
+      var r = converterValor(c[0][1], v);
+      if (r.erro) { problemas.push(k + ": " + r.erro); return; }
+      c.forEach(function (par) { linha[par[0]] = r.v; });
+    });
+    linha.protocolo = protocolo;
+    if (!linha.data_consulta) { linha.data_consulta = hojeLocal(); }
+    // IMC é derivado, como na 1ª consulta: existe como coluna e não como campo,
+    // e só entra se puder ser calculado — ausência nunca vira zero (D-06).
+    var imc = imcDe(num("peso"), num("estatura"));
+    if (imc) { linha.imc = parseFloat(imc); }
+    return { linha: linha, problemas: problemas, semColuna: semColuna };
+  }
+
+  function gravarLocal(linha) {
+    try {
+      var k = "pnar:anestesia";
+      var l = JSON.parse(localStorage.getItem(k) || "[]");
+      l.push(linha);
+      localStorage.setItem(k, JSON.stringify(l));
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: String(e) }; }
+  }
+
+  var ESPERA_SERVIDOR_MS = 12000;
+  function enviarServidor(corpo) {
+    var corrida = fetch(SUPABASE.url.replace(/\/$/, "") + "/rest/v1/pnar_consulta_anestesiologia", {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE.anonKey,
+        Authorization: "Bearer " + SUPABASE.anonKey,
+        "Content-Type": "application/json",
+        /* OBRIGATÓRIO com chave que só insere: o padrão do PostgREST é
+           devolver a linha gravada, e devolver exige SELECT. */
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(corpo)
+    }).then(function (r) {
+      if (r.ok) { return { ok: true }; }
+      return r.text().then(function (t) {
+        return { ok: false, erro: "HTTP " + r.status + " · " + t.slice(0, 400) };
+      });
+    }, function (e) {
+      return { ok: false, erro: "rede: " + (e && e.message ? e.message : e) };
+    });
+    var estouro = new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve({ ok: false, erro: "o servidor não deu resposta em " +
+          (ESPERA_SERVIDOR_MS / 1000) + " s (o envio pode ter chegado assim mesmo)" });
+      }, ESPERA_SERVIDOR_MS);
+    });
+    return Promise.race([corrida, estouro]);
+  }
+
+  /* Nunca enfeita o desfecho: sem servidor configurado, o título não diz
+     "salva no sistema". */
+  function mostrarSalvo(e) {
+    var cor = e.pendente ? "atencao" : (e.ok ? "info" : "erro");
+    var titulo = e.pendente ? "Gravando…"
+      : (e.ok ? (e.onde === "servidor" ? "Consulta salva" : "Consulta salva neste navegador")
+        : "Não foi possível gravar");
+    var t = [];
+    if (e.pendente) { t.push("Já guardada <b>neste navegador</b>. Enviando para o banco…"); }
+    if (e.ok && e.onde === "servidor") { t.push("Gravada no banco do PNAR e também neste navegador."); }
+    else if (e.ok) { t.push("Gravada <b>somente neste navegador</b>."); }
+    if (!e.ok && e.erro) { t.push("<b>Motivo:</b> " + esc(e.erro)); }
+    if (e.protocolo) { t.push("Protocolo <code>" + esc(e.protocolo) + "</code>"); }
+    if (e.gestacao) { t.push("Gestação <code>" + esc(e.gestacao) + "</code>"); }
+    else { t.push("<b>Sem vínculo de percurso:</b> esta consulta não ficou ligada à gestação."); }
+    if (e.campos !== undefined) { t.push(e.campos + " campo(s) gravado(s)."); }
+    if (e.semColuna && e.semColuna.length) {
+      t.push("<b>Não foi gravado</b> (sem coluna no contrato): " + esc(e.semColuna.join(", ")));
+    }
+    if (e.problemas && e.problemas.length) {
+      t.push("<b>Não foi gravado</b> (o contrato não tem valor para a resposta): " +
+        esc(e.problemas.join(" · ")));
+    }
+    document.getElementById("salvo-titulo").textContent = titulo;
+    document.getElementById("salvo-corpo").innerHTML =
+      '<div class="aviso aviso--' + cor + '"><span></span><ul class="notas"><li>' +
+      t.join("</li><li>") + "</li></ul></div>";
+    document.getElementById("modal-salvo").style.display = "flex";
+  }
+
+  /* Trava contra clique duplo: dois cliques gravariam dois atendimentos com
+     protocolos diferentes, e a duplicata é invisível — a chave não lê. */
+  var enviando = false;
+  function finalizar() {
+    if (enviando) { return; }
+    var protocolo = uuid();
+    var m = montarRegistro(protocolo);
+    ultimoProtocolo = protocolo;
+    var base = {
+      protocolo: protocolo, gestacao: get("gestacao_id"),
+      campos: Object.keys(m.linha).length,
+      semColuna: m.semColuna, problemas: m.problemas
+    };
+    var local = gravarLocal(m.linha);
+    if (!SUPABASE.url || !SUPABASE.anonKey) {
+      mostrarSalvo(Object.assign({}, base, { ok: local.ok, onde: "navegador", erro: local.erro }));
+      return;
+    }
+    enviando = true;
+    var botao = document.getElementById("finalizar");
+    botao.disabled = true;
+    mostrarSalvo(Object.assign({}, base, { pendente: true, ok: local.ok, onde: "navegador" }));
+    enviarServidor(m.linha).then(function (r) {
+      enviando = false;
+      botao.disabled = false;
+      mostrarSalvo(Object.assign({}, base, {
+        ok: r.ok, onde: r.ok ? "servidor" : "navegador",
+        erro: r.ok ? null : r.erro + (local.ok ? " — a consulta ficou guardada neste navegador." : "")
+      }));
+    });
+  }
+
+  /* ---- exportação -------------------------------------------------------- */
+  function rotuloDe(lista, v) {
+    for (var i = 0; i < lista.length; i++) { if (lista[i].v === v) { return lista[i].r; } }
+    return v || "";
+  }
+  var EXP_TRI = { sim: "Sim", nao: "Não", nsabe: "Não sabe" };
+  function montarExportacao() {
+    var blocos = [];
+    function bloco(titulo, linhas) {
+      var tem = linhas.filter(function (l) { return l; });
+      if (tem.length) { blocos.push(titulo.toUpperCase() + "\n" + tem.join("\n")); }
+    }
+    function item(rot, k, mapa) {
+      var v = get(k);
+      if (!v) { return ""; }
+      return rot + ": " + (mapa ? (mapa[v] || v) : v);
+    }
+    function virg(v) { return String(v).replace(".", ","); }
+
+    var med = [];
+    if (get("ig")) { med.push("IG na consulta: " + get("ig") + " semanas"); }
+    if (get("peso")) { med.push("Peso: " + virg(get("peso")) + " kg"); }
+    if (get("estatura")) { med.push("Altura: " + virg(get("estatura")) + " cm"); }
+    var imcExp = imcDe(num("peso"), num("estatura"));
+    if (imcExp) { med.push("IMC: " + virg(imcExp)); }
+    if (get("asa")) { med.push("Classificação " + rotuloDe(ASA, get("asa"))); }
+    bloco("Avaliação anestésica", [med.join("; ") + (med.length ? "." : "")]);
+
+    bloco("Antecedentes anestésicos", [
+      item("Anestesia prévia", "anestprev", EXP_TRI),
+      item("Complicação anestésica prévia", "compprev", EXP_TRI) +
+        (get("compqual") ? " (" + get("compqual") + ")" : ""),
+      item("História familiar de hipertermia maligna", "hipmal", EXP_TRI),
+      item("Alergia medicamentosa", "alerg", EXP_TRI) +
+        (get("alergqual") ? " (" + get("alergqual") + ")" : "")]);
+
+    bloco("Via aérea", [
+      get("mallam") ? "Mallampati " + rotuloDe(MALLAMPATI, get("mallam")) : "",
+      item("Prótese dentária", "protese", EXP_TRI),
+      item("Risco de via aérea difícil", "viadificil", EXP_TRI)]);
+
+    var fat = FATORES_HPP.map(function (f) {
+      var v = get("hpp_" + f.id);
+      return v ? f.nome + ": " + EXP_TRI[v] : "";
+    }).filter(function (x) { return x; });
+    var lab = [];
+    if (get("hb")) { lab.push("Hemoglobina: " + virg(get("hb")) + " g/dL"); }
+    if (get("ferrit")) { lab.push("Ferritina: " + virg(get("ferrit")) + " ng/mL"); }
+    if (get("fibrin")) { lab.push("Fibrinogênio: " + virg(get("fibrin")) + " mg/dL"); }
+    bloco("Risco de hemorragia pós-parto", [
+      fat.length ? "Fatores: " + fat.join("; ") + "." : "",
+      lab.length ? lab.join("; ") + "." : "",
+      get("riscohpp") ? "Classificação do risco: " + rotuloDe(RISCO_HPP, get("riscohpp")).toUpperCase() +
+        " (classificação de quem avaliou; a tela não a calcula)." : ""]);
+
+    bloco("Planejamento anestésico", [
+      item("Elegível para analgesia de parto", "elegivel", EXP_TRI),
+      item("Contraindicação ao bloqueio neuroaxial", "contraneuro", EXP_TRI),
+      item("Reserva de sangue recomendada", "reservasang", EXP_TRI),
+      item("Encaminhamento para cardiologia", "encamcardio", EXP_TRI)]);
+
+    bloco("Educação e consentimento", [
+      item("Recebeu orientação sobre analgesia de parto", "orient", EXP_TRI),
+      item("Recebeu material educativo", "material", EXP_TRI),
+      item("Conhecia analgesia de parto previamente", "conhecia", EXP_TRI),
+      item("Deseja analgesia no trabalho de parto", "deseja", EXP_TRI),
+      item("Mudou de opinião após a consulta", "mudou", EXP_TRI),
+      item("Assinou TCLE para analgesia de parto", "tcle", EXP_TRI),
+      item("Observações", "obs")]);
+
+    var quem = [get("nome"), get("prontuario") ? "prontuário " + get("prontuario") : ""]
+      .filter(function (x) { return x; }).join(" · ");
+    var cab = "CONSULTA DE ANESTESIOLOGIA — PNAR (PRÉ-NATAL DE ALTO RISCO)\n" +
+      (quem ? "Paciente: " + quem + "\n" : "Paciente não identificada nesta tela.\n") +
+      (get("data_consulta") ? "Data da consulta: " + fmtData(get("data_consulta")) + "\n" : "");
+    var corpo = blocos.length ? blocos.join("\n\n") : "Nenhum campo preenchido até agora.";
+    var agora = new Date();
+    function dois(n) { return (n < 10 ? "0" : "") + n; }
+    var rodape = "\n\nExportado do AGMEJC (protótipo) em " +
+      dois(agora.getDate()) + "/" + dois(agora.getMonth() + 1) + "/" + agora.getFullYear() +
+      " " + dois(agora.getHours()) + ":" + dois(agora.getMinutes()) + " · " +
+      Object.keys(dados).length + " campo(s) preenchido(s). Campo não citado = não preenchido.";
+    /* A chave de continuidade viaja daqui para o próximo atendimento, do mesmo
+       jeito que a 1ª consulta a passou para cá. */
+    var chave = ultimoProtocolo
+      ? "\nChave de continuidade PNAR · gestação " + (get("gestacao_id") || "não vinculada") +
+        " · atendimento " + ultimoProtocolo
+      : "";
+    return cab + "\n" + corpo + rodape + chave;
+  }
+
+  /* ---- eventos ----------------------------------------------------------- */
+  document.addEventListener("click", function (ev) {
+    var t = ev.target.closest("button");
+    if (!t) { return; }
+    if (t.dataset.bloco) { blocoAtivo = t.dataset.bloco; render(); return; }
+    if (t.parentElement && t.parentElement.dataset.tri) {
+      var ch = t.parentElement.dataset.tri, v = t.dataset.v;
+      // clicar no já selecionado volta para "não perguntei" — o terceiro
+      // estado precisa ser alcançável, senão não existe de verdade (D-06)
+      set(ch, get(ch) === v ? null : v);
+      render(); return;
+    }
+    if (t.dataset.descartar) { set(t.dataset.descartar, null); render(); return; }
+    if (t.id === "finalizar") { finalizar(); return; }
+    if (t.id === "salvo-exportar") {
+      document.getElementById("export-texto").value = montarExportacao();
+      document.getElementById("modal-export").style.display = "flex";
+      return;
+    }
+    if (t.id === "salvo-fechar") { document.getElementById("modal-salvo").style.display = "none"; return; }
+    if (t.id === "export-fechar") { document.getElementById("modal-export").style.display = "none"; return; }
+    if (t.id === "export-copiar") {
+      var area = document.getElementById("export-texto");
+      function feito() {
+        t.textContent = "Copiado ✓";
+        setTimeout(function () { t.textContent = "Copiar texto"; }, 2000);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(area.value).then(feito, function () { area.select(); });
+      } else { area.focus(); area.select(); }
+      return;
+    }
+    if (t.id === "rascunho") {
+      try {
+        localStorage.setItem("pnar:anestesia-rascunho", JSON.stringify(dados));
+        alert("Rascunho guardado neste navegador com " + Object.keys(dados).length +
+          " campo(s).\n\nNão é a gravação do atendimento: para isso, use “Finalizar consulta”.");
+      } catch (e) { alert("Não foi possível guardar o rascunho.\n\n" + e); }
+      return;
+    }
+  });
+
+  document.addEventListener("input", function (ev) {
+    var el = ev.target;
+    if (el.id === "colar-chave") { lerChave(el.value); return; }
+    if (!el.dataset.k) { return; }
+    if (el.hasAttribute("data-num")) {
+      // recusa o que não é número sem mexer no cursor
+      var antes = el.value, pos = el.selectionStart;
+      var limpo = antes.replace(/[^0-9.,]/g, "");
+      if (limpo !== antes) {
+        el.value = limpo;
+        el.setSelectionRange(pos - (antes.length - limpo.length), pos - (antes.length - limpo.length));
+      }
+      set(el.dataset.k, limpo);
+      atualizarTopo();
+      return;
+    }
+    set(el.dataset.k, el.value);
+    atualizarTopo();
+  });
+
+  /* NAO HA listener de `change` que redesenhe. A primeira versao tinha, e a
+     suite pegou o estrago: `change` dispara quando o campo perde o foco, ou
+     seja, no instante em que quem preenche vai para o campo seguinte -- o
+     render destruia esse campo antes de ele receber o valor, e o dado se
+     perdia em silencio. O que muda a tela e respondido por clique (tri), que
+     redesenha; o que e digitado atualiza o topo e os derivados sem redesenhar. */
+  function atualizarTopo() {
+    document.getElementById("topo-nome").textContent = get("nome") || "—";
+    document.getElementById("topo-pront").textContent = get("prontuario") || "—";
+    document.getElementById("contagem").textContent =
+      Object.keys(dados).length + " campo(s) preenchido(s)";
+    var imc = document.getElementById("imc-campo");
+    if (imc) { imc.value = imcDe(num("peso"), num("estatura")); }
+  }
+
+  /* Lê a chave colada da evolução do AGHU. Não consulta o banco: a chave
+     pública não lê (D-30), então o vínculo do percurso vem do texto que a
+     paciente/o prontuário já carrega. */
+  function lerChave(txt) {
+    var uu = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
+    var achados = String(txt).match(uu);
+    if (!achados || achados.length < 2) { return; }
+    set("gestacao_id", achados[0].toLowerCase());
+    set("atendimento_anterior", achados[1].toLowerCase());
+    render();
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>
