@@ -206,17 +206,17 @@ button { font: inherit; color: inherit; }
    * Consulta de anestesiologia do PNAR — D-38.
    *
    * As 42 variáveis vieram da planilha da médica (2026-09-03), transcritas
-   * em docs/diretrizes/01-anestesiologia-precisa.md. As regras que valem
-   * aqui são as mesmas da 1ª consulta, e não por estilo:
+   * em docs/diretrizes/01-anestesiologia-precisa.md — hoje são 27: o bloco
+   * "Risco de hemorragia pós-parto" (15 campos) migrou para a calculadora
+   * automatizada da 1ª consulta (D-39). As regras que valem aqui são as
+   * mesmas da 1ª consulta, e não por estilo:
    *
    *   D-06  toda pergunta binária tem TRÊS estados. "Não perguntei" nunca
-   *         vira "Não" — são 30 das 42 variáveis desta tela.
+   *         vira "Não" — são 18 das 27 variáveis desta tela.
    *   D-10  nenhuma inferência clínica entre campos. Cálculo pode (IMC).
    *   D-14  sinalizar, nunca esconder.
    *   D-16  campo que já foi preenchido não some sozinho: vira órfão visível
    *         com descarte explícito.
-   *   D-25  a tela não interpreta. A classificação de risco de HPP é
-   *         DIGITADA, nunca calculada a partir dos fatores ao lado.
    *   D-30  a gravação é cega: a chave pública só INSERE, o protocolo nasce
    *         aqui e `Prefer: return=minimal` é obrigatório.
    * ====================================================================== */
@@ -247,23 +247,8 @@ button { font: inherit; color: inherit; }
     "elegivel": [["elegivel_analgesia_parto","estado_clinico"]],
     "encamcardio": [["encaminhamento_cardiologia","estado_clinico"]],
     "estatura": [["estatura_cm","numeric"]],
-    "ferrit": [["ferritina","numeric"]],
-    "fibrin": [["fibrinogenio","numeric"]],
     "gestacao_id": [["gestacao_id","uuid"]],
-    "hb": [["hemoglobina","numeric"]],
     "hipmal": [["fam_hipertermia_maligna","estado_clinico"]],
-    "hpp_acret": [["acretismo_suspeita","estado_clinico"]],
-    "hpp_anticoag": [["uso_anticoagulantes","estado_clinico"]],
-    "hpp_coagul": [["coagulopatia","estado_clinico"]],
-    "hpp_gemel": [["gestacao_gemelar","estado_clinico"]],
-    "hpp_hppant": [["hpp_anterior","estado_clinico"]],
-    "hpp_macros": [["macrossomia_suspeita","estado_clinico"]],
-    "hpp_mioma": [["miomatose_importante","estado_clinico"]],
-    "hpp_multip": [["multiparidade","estado_clinico"]],
-    "hpp_plaqtp": [["plaquetopenia","estado_clinico"]],
-    "hpp_polidr": [["polidramnio","estado_clinico"]],
-    "hpp_pprev": [["placenta_previa","estado_clinico"]],
-    "hpp_transf": [["transfusao_previa","estado_clinico"]],
     "ig": [["ig_semanas","integer"]],
     "mallam": [["mallampati","mallampati"]],
     "material": [["material_educativo","estado_clinico"]],
@@ -275,7 +260,6 @@ button { font: inherit; color: inherit; }
     "protese": [["protese_dentaria","estado_clinico"]],
     "prontuario": [["prontuario","text"]],
     "reservasang": [["reserva_sangue","estado_clinico"]],
-    "riscohpp": [["risco_hpp","risco_hpp"]],
     "tcle": [["tcle_analgesia","estado_clinico"]],
     "viadificil": [["risco_via_aerea_dificil","estado_clinico"]]
   };
@@ -284,8 +268,7 @@ button { font: inherit; color: inherit; }
   var CONTRATO_DOMINIOS = {
     "classificacao_asa": ["asa_1","asa_2","asa_3","asa_4"],
     "estado_clinico": ["sim","nao","nao_sabe"],
-    "mallampati": ["mp_1","mp_2","mp_3","mp_4"],
-    "risco_hpp": ["baixo","moderado","alto"]
+    "mallampati": ["mp_1","mp_2","mp_3","mp_4"]
   };
 
   var APELIDOS = { estado_clinico: { nsabe: "nao_sabe" } };
@@ -335,35 +318,10 @@ button { font: inherit; color: inherit; }
     { v: "mp_1", r: "I" }, { v: "mp_2", r: "II" },
     { v: "mp_3", r: "III" }, { v: "mp_4", r: "IV" }
   ];
-  /* "alto" recebe destaque vermelho: é sinalização do que pede conduta, do
-     mesmo jeito que "reagente" na 1ª consulta — nunca um cálculo da tela. */
-  var RISCO_HPP = [
-    { v: "baixo", r: "Baixo" }, { v: "moderado", r: "Moderado" },
-    { v: "alto", r: "Alto", ruim: true }
-  ];
-
-  /* Os doze fatores de risco de HPP da planilha. Cada um é pergunta própria
-     de três estados; nenhum deles alimenta a classificação (D-25). */
-  var FATORES_HPP = [
-    { id: "hppant", nome: "Hemorragia pós-parto anterior" },
-    { id: "transf", nome: "Transfusão sanguínea prévia" },
-    { id: "pprev", nome: "Placenta prévia" },
-    { id: "acret", nome: "Suspeita de acretismo placentário" },
-    { id: "mioma", nome: "Miomatose uterina importante" },
-    { id: "gemel", nome: "Gestação gemelar" },
-    { id: "polidr", nome: "Polidrâmnio" },
-    { id: "macros", nome: "Macrossomia fetal suspeita" },
-    { id: "multip", nome: "Multiparidade" },
-    { id: "coagul", nome: "Coagulopatia" },
-    { id: "anticoag", nome: "Uso de anticoagulantes" },
-    { id: "plaqtp", nome: "Plaquetopenia" }
-  ];
-
   var BLOCOS = [
     { id: "ident", nome: "Identificação" },
     { id: "aval", nome: "Avaliação anestésica" },
     { id: "via", nome: "Via aérea" },
-    { id: "hpp", nome: "Risco de HPP" },
     { id: "plano", nome: "Planejamento" },
     { id: "educ", nome: "Educação" }
   ];
@@ -512,32 +470,6 @@ button { font: inherit; color: inherit; }
       "</div></div>";
   };
 
-  telas.hpp = function () {
-    var h = '<h2 class="painel__titulo">Risco de hemorragia pós-parto</h2>' +
-      '<p class="painel__nota">Os fatores abaixo são coletados; a classificação do risco é ' +
-      "<b>respondida por quem avalia</b>. A tela não a calcula a partir deles — isso exigiria " +
-      "instrumento publicado e validado, que ainda não foi implementado.</p>";
-
-    h += '<div class="secao"><div class="secao__titulo">Fatores</div><div class="linhas">';
-    FATORES_HPP.forEach(function (f) { h += linha(esc(f.nome), "hpp_" + f.id); });
-    h += "</div></div>";
-
-    h += '<div class="secao"><div class="secao__titulo">Laboratório</div><div class="campos">' +
-      campoNum("hb", "Hemoglobina (g/dL)") +
-      campoNum("ferrit", "Ferritina (ng/mL)") +
-      campoNum("fibrin", "Fibrinogênio (mg/dL)", "quando disponível") +
-      "</div></div>";
-
-    h += '<div class="secao"><div class="secao__titulo">Classificação</div><div class="campos">' +
-      campoTri("riscohpp", "Classificação do risco para hemorragia pós-parto", RISCO_HPP, "g") +
-      "</div>" +
-      '<div class="aviso aviso--info"><span>i</span><div>' +
-      "<b>Esta resposta é sua, não do sistema.</b>Os fatores acima ficam registrados como foram " +
-      "respondidos; nenhum escore é somado por trás." +
-      "</div></div></div>";
-    return h;
-  };
-
   telas.plano = function () {
     return '<h2 class="painel__titulo">Planejamento anestésico</h2>' +
       '<p class="painel__nota">Condutas definidas nesta avaliação.</p>' +
@@ -589,8 +521,6 @@ button { font: inherit; color: inherit; }
     educ: ["orient", "material", "conhecia", "deseja", "mudou", "tcle", "obs"]
   };
   function chaveDoBloco(k) {
-    if (k.indexOf("hpp_") === 0 || k === "hb" || k === "ferrit" ||
-        k === "fibrin" || k === "riscohpp") { return "hpp"; }
     for (var b in MAPA_BLOCO) {
       if (MAPA_BLOCO[b].indexOf(k) >= 0) { return b; }
     }
@@ -792,20 +722,6 @@ button { font: inherit; color: inherit; }
       get("mallam") ? "Mallampati " + rotuloDe(MALLAMPATI, get("mallam")) : "",
       item("Prótese dentária", "protese", EXP_TRI),
       item("Risco de via aérea difícil", "viadificil", EXP_TRI)]);
-
-    var fat = FATORES_HPP.map(function (f) {
-      var v = get("hpp_" + f.id);
-      return v ? f.nome + ": " + EXP_TRI[v] : "";
-    }).filter(function (x) { return x; });
-    var lab = [];
-    if (get("hb")) { lab.push("Hemoglobina: " + virg(get("hb")) + " g/dL"); }
-    if (get("ferrit")) { lab.push("Ferritina: " + virg(get("ferrit")) + " ng/mL"); }
-    if (get("fibrin")) { lab.push("Fibrinogênio: " + virg(get("fibrin")) + " mg/dL"); }
-    bloco("Risco de hemorragia pós-parto", [
-      fat.length ? "Fatores: " + fat.join("; ") + "." : "",
-      lab.length ? lab.join("; ") + "." : "",
-      get("riscohpp") ? "Classificação do risco: " + rotuloDe(RISCO_HPP, get("riscohpp")).toUpperCase() +
-        " (classificação de quem avaliou; a tela não a calcula)." : ""]);
 
     bloco("Planejamento anestésico", [
       item("Elegível para analgesia de parto", "elegivel", EXP_TRI),

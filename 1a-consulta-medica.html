@@ -562,7 +562,10 @@ button { font: inherit; color: inherit; }
     { id: "autoimune", nome: "Doença autoimune", cod: null, det: true,
       detRot: "Qual doença autoimune?", dica: "lúpus, SAF, outra" },
     { id: "tran", nome: "Transfusão", cod: "210" },
-    { id: "tube", nome: "Tuberculose", cod: "211", par: "família" }
+    { id: "tube", nome: "Tuberculose", cod: "211", par: "família" },
+    // coagul/anticoag: variaveis novas, insumo da calculadora de HPP (D-39).
+    { id: "coagul", nome: "Coagulopatia", cod: null },
+    { id: "anticoag", nome: "Uso de anticoagulantes", cod: null }
   ];
 
   /* Antecedentes familiares: secao propria, nunca coluna. As 3 que a planilha
@@ -971,6 +974,62 @@ button { font: inherit; color: inherit; }
     };
   }
 
+  /* HPP: adaptacao do Quadro 5 (PAHO 2018, reproduzido no protocolo
+     Einstein/"Todas as Maes Importam" de HPP) para o que da para saber NUMA
+     CONSULTA DE PRE-NATAL -- nao o quadro inteiro (D-39, mesmo precedente da
+     D-27 para o fullPIERS). Ficam de fora, e o cartao diz por que:
+       - sangramento ativo a admissao e corioamnionite: achado de
+         admissao/intraparto, nao risco anteparto avaliavel numa consulta;
+       - pre-eclampsia/hipertensao gestacional: entram no formulario, mas a
+         tela nao distingue leve/grave (D-05 veta inferir a gravidade);
+       - polidramnio e macrossomia isolados: a fonte nao publica corte
+         numerico para nenhum dos dois -- so entram via gestacao multipla
+         ("superdistensao uterina");
+       - hematocrito: nao ha campo (so hemoglobina, e Hb->Ht seria inferencia
+         clinica, D-05); miomatose uterina: so aparece no Quadro 4, nunca no
+         Quadro 5 que esta sendo adaptado.
+     Insumo ausente nunca vira "sem risco" -- fica de fora da contagem e
+     aparece em "dados insuficientes", igual insumosPiers(). */
+  function insumosHPP() {
+    var plaq = parseFloat(get("plaq"));               // mesmo insumo do fullPIERS
+    var np = parseInt(get("np"), 10), ncesa = parseInt(get("ncesa"), 10);
+    var pesoNum = parseFloat(get("peso")), estNum = parseFloat(get("estatura"));
+    var imc = (!isNaN(pesoNum) && !isNaN(estNum) && estNum > 0)
+      ? pesoNum / Math.pow(estNum / 100, 2) : null;
+
+    var altoDireto = [
+      { n: "Placenta prévia ou de inserção baixa", tem: !!get("atu_pprev"), sim: get("atu_pprev") === "sim" },
+      { n: "Suspeita de acretismo placentário", tem: !!get("atu_acret"), sim: get("atu_acret") === "sim" },
+      { n: "Descolamento prematuro de placenta", tem: !!get("atu_dplac"), sim: get("atu_dplac") === "sim" },
+      { n: "Coagulopatia", tem: !!get("pes_coagul"), sim: get("pes_coagul") === "sim" },
+      { n: "Uso de anticoagulantes", tem: !!get("pes_anticoag"), sim: get("pes_anticoag") === "sim" },
+      { n: "Plaquetas < 100.000/mm³", tem: !isNaN(plaq), sim: !isNaN(plaq) && plaq < 100000 }
+    ];
+    var medioDireto = [
+      // proxy: so cesariana previa e contavel; outra cirurgia uterina fica em texto livre (205/317)
+      { n: "Cesariana ou cirurgia uterina prévia", tem: !isNaN(ncesa), sim: !isNaN(ncesa) && ncesa >= 1 },
+      // proxy: cobre so a gestacao multipla; polidramnio/macrossomia isolados ficam de fora (sem corte na fonte)
+      { n: "Gestação múltipla (superdistensão uterina)", tem: !!get("gest_multipla"), sim: get("gest_multipla") === "sim" },
+      { n: "Grande multípara (≥ 4 partos vaginais ou ≥ 3 cesáreas)",
+        tem: !isNaN(np) || !isNaN(ncesa),
+        sim: (!isNaN(np) && np >= 4) || (!isNaN(ncesa) && ncesa >= 3) },
+      { n: "Hemorragia pós-parto ou atonia uterina em gestação anterior", tem: !!get("ant_hpp"), sim: get("ant_hpp") === "sim" },
+      { n: "Obesidade materna (IMC > 35 kg/m²)", tem: imc !== null, sim: imc !== null && imc > 35 }
+    ];
+
+    var altoAtivo = altoDireto.filter(function (f) { return f.sim; });
+    var medioAtivo = medioDireto.filter(function (f) { return f.sim; });
+    var faltando = altoDireto.concat(medioDireto).filter(function (f) { return !f.tem; });
+
+    var tier;
+    if (altoAtivo.length > 0 || medioAtivo.length >= 2) { tier = "alto"; }
+    else if (medioAtivo.length === 1) { tier = "medio"; }
+    else { tier = "baixo"; }
+
+    return { altoDireto: altoDireto, medioDireto: medioDireto,
+             altoAtivo: altoAtivo, medioAtivo: medioAtivo, faltando: faltando, tier: tier };
+  }
+
   /* ---- desenho dos blocos ------------------------------------------------ */
   var telas = {};
 
@@ -1108,8 +1167,51 @@ button { font: inherit; color: inherit; }
 
     h += "</div>";
 
+    var hpp = insumosHPP();
+    var linhasHPP = "";
+    hpp.altoDireto.concat(hpp.medioDireto).forEach(function (f) {
+      var selo = !f.tem
+        ? '<span class="piers__item" style="cursor:default">falta</span>'
+        : (f.sim
+          ? '<span class="selo-alerta">presente</span>'
+          : '<span class="piers__item ok" style="cursor:default">ausente</span>');
+      linhasHPP += '<div class="linha-cond"><span class="linha-cond__rot">' + esc(f.n) + "</span>" + selo + "</div>";
+    });
+
+    var CORTIER = { alto: "ruim", medio: "medio", baixo: "bom" };
+    var ROTTIER = { alto: "Risco alto", medio: "Risco moderado", baixo: "Risco baixo" };
+    var corHpp = CORTIER[hpp.tier], valorHpp = ROTTIER[hpp.tier];
+
+    var topicosHpp = [];
+    if (hpp.altoAtivo.length > 0) {
+      topicosHpp.push("Fator de risco alto: <b>" + esc(hpp.altoAtivo.map(function (f) { return f.n; }).join("; ")) + "</b>");
+    } else if (hpp.tier === "alto") {
+      topicosHpp.push("Risco alto por <b>2 ou mais</b> fatores de risco moderado: " +
+        esc(hpp.medioAtivo.map(function (f) { return f.n; }).join("; ")));
+    } else if (hpp.medioAtivo.length === 1) {
+      topicosHpp.push("Fator de risco moderado: <b>" + esc(hpp.medioAtivo[0].n) + "</b>");
+    }
+    if (hpp.faltando.length > 0) {
+      topicosHpp.push("<b>Dados insuficientes</b> — não avaliado: " +
+        esc(hpp.faltando.map(function (f) { return f.n; }).join(", ")) +
+        ". A classificação pode subir se algum desses vier positivo");
+    }
+    topicosHpp.push("Adaptado do <b>Quadro 5</b> (PAHO 2018): exclui achado de admissão/intraparto " +
+      "(sangramento ativo, corioamnionite) e o que a 1ª consulta não coleta (hematócrito, gravidade " +
+      "de pré-eclâmpsia/hipertensão, cirurgia uterina que não seja cesariana)");
+    topicosHpp.push("Não considera polidrâmnio nem macrossomia isolados — a fonte não publica corte " +
+      "numérico para nenhum dos dois");
+
     h += '<div class="secao"><div class="secao__titulo">Hemorragia pós-parto (HPP)</div>' +
-      '<p style="font-size:12px;color:#93a2b1;margin:0">Em preparação.</p></div>';
+      '<p style="font-size:12px;margin:0 0 10px">Estratificação de risco anteparto, adaptada do ' +
+      "<b>Quadro 5</b> (PAHO 2018).</p>" +
+      grupoLinhas(linhasHPP) +
+      '<div class="cartao-calc cartao-calc--' + corHpp + '">' +
+      '<div class="cartao-calc__topo">' +
+      '<div><div class="cartao-calc__rot">Classificação de risco</div>' +
+      '<div class="cartao-calc__valor">' + esc(valorHpp) + "</div></div></div>" +
+      '<ul class="cartao-calc__notas"><li>' + topicosHpp.join("</li><li>") + "</li></ul>" +
+      "</div></div>";
 
     return h;
   };
@@ -1178,6 +1280,11 @@ button { font: inherit; color: inherit; }
       "Registra o que ocorreu <b>até</b> esta consulta, não apenas o que está ativo agora." +
       "</p>" +
       intercorrencias("atu_", "atu") +
+      // Acretismo so existe no eixo atual: e suspeita por imagem NESTA gestacao,
+      // nao um antecedente das anteriores -- por isso fica fora de CONDICOES
+      // (que so cobre as 15 condicoes simetricas nos dois eixos) e entra como
+      // linha solta, insumo da calculadora de HPP (D-39).
+      grupoLinhas(linha("Suspeita de acretismo placentário", null, "atu_acret", SIM_NAO_SABE)) +
       '<div class="campos" style="margin-top:12px">' + campoArea("out4", "Outros", "369") + "</div></div>";
 
     h += '<div class="secao"><div class="secao__titulo">Queixas e medicamentos</div>' +
@@ -1287,6 +1394,11 @@ button { font: inherit; color: inherit; }
       }
       h += '<div class="secao__titulo" style="margin-top:16px">Intercorrências em gestações anteriores</div>' +
         intercorrencias("ant_", "ant") +
+        // HPP so existe no eixo anterior: e evento pos-parto de uma gestacao ja
+        // encerrada -- na atual o parto ainda nao aconteceu. Por isso fica fora
+        // de CONDICOES e entra como linha solta, insumo da calculadora de HPP
+        // (D-39).
+        grupoLinhas(linha("Hemorragia pós-parto em gestação anterior", null, "ant_hpp", SIM_NAO_SABE)) +
         campoArea("out3", "Outras observações das gestações anteriores", "317");
     } else {
       // Nada e apagado em silencio (D-16): se ha dado preenchido e a resposta
@@ -2648,6 +2760,8 @@ button { font: inherit; color: inherit; }
     "ano_ult_parto": [["ano_ultimo_parto","integer"]],
     "ant_hgest": [["hist_hipertensao_gestacional","estado_clinico"]],
     "atu_hgest": [["atual_hipertensao_gestacional","estado_clinico"]],
+    "ant_hpp": [["hist_hpp_anterior","estado_clinico"]],
+    "atu_acret": [["atual_acretismo_suspeita","estado_clinico"]],
     "data_consulta": [["data_consulta","date"]],
     "edema_grau": [["edema_grau","grau_edema"]],
     "ncesa": [["num_cesareas","integer"]],
@@ -2753,6 +2867,8 @@ button { font: inherit; color: inherit; }
     "pes_renal": [["pes_doenca_renal","estado_clinico"]],
     "pes_tran": [["pes_transfusao","estado_clinico"]],
     "pes_tube": [["pes_tuberculose","estado_clinico"]], "peso": [["peso_kg","numeric"]],
+    "pes_coagul": [["pes_coagulopatia","estado_clinico"]],
+    "pes_anticoag": [["pes_uso_anticoagulantes","estado_clinico"]],
     "plan": [["cond_planos","text"]], "plaq": [["plaquetas","numeric"]],
     "prontuario": [["prontuario","text"]], "psist": [["pa_sistolica","integer"]],
     "quea": [["queixas_atuais","text"]], "retorno": [["cond_retorno_semanas","integer"]],
