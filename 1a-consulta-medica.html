@@ -112,6 +112,15 @@ button { font: inherit; color: inherit; }
 .trilho__marca.pronto { background: var(--verde); }
 
 /* --- painel --------------------------------------------------------------- */
+/* Rolagem unica (D-41): cada bloco e uma secao em sequencia, separada da
+   anterior por um fio e um respiro. */
+.bloco-sec + .bloco-sec { border-top: 1px solid var(--borda); margin-top: 26px; padding-top: 18px; }
+.bloco-sec { scroll-margin-top: 0; }
+.trilho__falta { margin-left: auto; margin-right: 6px; font-size: 10.5px; color: var(--texto-fraco); font-variant-numeric: tabular-nums; }
+.trilho__falta + .trilho__marca { margin-left: 0; }
+@media (max-width: 860px) { .trilho__falta { display: none; } .trilho__falta + .trilho__marca { margin-left: auto; } }
+.pendentes { font-size: 11.5px; color: var(--texto); }
+.pendentes b { color: var(--texto-forte); font-variant-numeric: tabular-nums; }
 .painel { flex: 1; overflow-y: auto; padding: 18px 22px 28px; min-width: 0; }
 .painel__titulo {
   font-size: 16px; color: var(--texto-forte); font-weight: 600;
@@ -173,6 +182,8 @@ button { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .tri button:last-child { border-right: 0; }
+.tri:focus { outline: none; }
+.tri:focus-visible, .tri:has(button:focus-visible) { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2f80c9; }
 .tri button:hover { background: #eef2f5; }
 /* FUNDO PADRAO para qualquer opcao marcada. Sem ele, `color:#fff` valia para
    TODAS as opcoes mas o fundo so era definido para nao/sim/normal/alterado/
@@ -306,9 +317,14 @@ button { font: inherit; color: inherit; }
    exatamente o defeito que a gramatica deveria eliminar.
    Em duas colunas quando a tela permite -- as 14 condicoes ocupavam uma coluna
    so e obrigavam a rolar por uma lista longa e estreita. */
+/* Tres colunas quando cabem (D-41): a largura minima de cada coluna e o
+   rotulo mais longo do grupo (--rot, medido em ajustarRotulos) mais o
+   controle, entao um grupo de rotulos longos cai para duas sozinho, sem
+   espremer o controle. Durante a medicao --rot vale max-content, o calc fica
+   invalido e a grade vira uma coluna -- e o que a medicao quer. */
 .linhas-cond {
   display: grid; gap: 0 28px;
-  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--rot, 300px) + 210px), 1fr));
 }
 /* Rotulo em coluna de largura FIXA, nao 1fr. Com 1fr as bordas DIREITAS dos
    controles e que alinham, e a esquerda passa a variar conforme o numero de
@@ -443,6 +459,7 @@ button { font: inherit; color: inherit; }
 
     <div class="modal__rodape">
       <div class="piers" id="piers"></div>
+      <div class="pendentes" id="pendentes"></div>
       <div class="acoes" style="margin-left:auto">
         <button class="botao botao--neutro" id="rascunho">Salvar rascunho</button>
         <!-- "Finalizar consulta" GRAVA. Exportar deixou de ser o fim do
@@ -727,6 +744,7 @@ button { font: inherit; color: inherit; }
     { id: "glice", nome: "Controle glicêmico" },
     { id: "vacin", nome: "Vacinas" },
     { id: "gesta", nome: "Gestação atual" },
+    { id: "racio", nome: "Raciocínio clínico" },
     { id: "condu", nome: "Condutas" }, { id: "calc", nome: "Calculadoras" }
   ];
 
@@ -767,9 +785,10 @@ button { font: inherit; color: inherit; }
   /* ---- controle de 3 estados -------------------------------------------- */
   function tri(chave, opcoes) {
     var atual = get(chave);
-    var h = '<span class="tri" data-tri="' + chave + '">';
-    opcoes.forEach(function (o) {
-      h += '<button type="button" data-v="' + o.v + '"' + (atual === o.v ? ' class="on"' : "") +
+    var h = '<span class="tri" tabindex="0" data-tri="' + chave + '">';
+    opcoes.forEach(function (o, i) {
+      h += '<button type="button" tabindex="-1" data-v="' + o.v + '"' + (atual === o.v ? ' class="on"' : "") +
+           ' title="tecla ' + (i + 1) + '"' +
            ' aria-pressed="' + (atual === o.v) + '">' + esc(o.r) + "</button>";
     });
     return h + "</span>";
@@ -1820,9 +1839,10 @@ button { font: inherit; color: inherit; }
   function exTri(c, r, ops, t) {
     var atual = exGet(c);
     var h = '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + "</label>" +
-      '<div><span class="tri" data-ex-tri="' + c + '">';
-    ops.forEach(function (o) {
-      h += '<button type="button" data-v="' + o.v + '"' + (atual === o.v ? ' class="on"' : "") +
+      '<div><span class="tri" tabindex="0" data-ex-tri="' + c + '">';
+    ops.forEach(function (o, i) {
+      h += '<button type="button" tabindex="-1" data-v="' + o.v + '"' + (atual === o.v ? ' class="on"' : "") +
+        ' title="tecla ' + (i + 1) + '"' +
         ' aria-pressed="' + (atual === o.v) + '">' + esc(o.r) + "</button>";
     });
     return h + "</span></div></div>";
@@ -2068,6 +2088,17 @@ button { font: inherit; color: inherit; }
     return h;
   };
 
+  /* Raciocinio clinico / discussao do caso (D-41). Texto livre de proposito:
+     e o lugar da sintese de quem atende, e a tela nao interpreta (D-25) -- nada
+     aqui e lido, resumido ou sugerido pelo formulario. Fica ANTES de Condutas
+     porque e o que justifica a conduta. */
+  telas.racio = function () {
+    return '<h2 class="painel__titulo">Raciocínio clínico</h2>' +
+      '<p class="painel__nota">Síntese do caso, hipóteses e o que justifica a conduta. Texto livre.</p>' +
+      '<div class="campos">' +
+      campoArea("racio", "Raciocínio clínico / discussão do caso", null, 180) + "</div>";
+  };
+
   telas.condu = function () {
     var h = '<h2 class="painel__titulo">Condutas e encaminhamentos</h2>' +
       '<p class="painel__nota">Orientações dadas, exames solicitados e intervalo de retorno.</p>';
@@ -2084,9 +2115,14 @@ button { font: inherit; color: inherit; }
     // Campo livre da conduta, no bloco onde ela e decidida. Usa 708 (Planos), que
     // ja existe na planilha para exatamente isto -- antes ficava no fim da tela,
     // depois das ultrassonografias, longe das orientacoes que descreve.
+    // Rotulo e altura mudaram a pedido dos medicos (2026-09-30, D-41): as
+    // orientacoes marcadas acima nao cobrem o que se orienta de verdade, e o
+    // campo livre e onde isso fica escrito. Mesma coluna, sem migracao.
     h += "</div>" +
       '<div class="campos" style="margin-top:12px">' +
-      campoArea("plan", "Conduta e plano — descrição livre", "708") + "</div></div>";
+      campoArea("plan", "Orientações, conduta e plano — descrição livre", "708", 150,
+        "Orientações dadas, prescrição, o que a paciente deve observar e quando voltar.") +
+      "</div></div>";
 
     h += '<div class="secao" style="margin-top:16px"><div class="secao__titulo">Exames</div>' +
       grupoLinhas(linha("Solicito rotina de exames", "701", "solr", SIM_NAO)) +
@@ -2162,8 +2198,8 @@ button { font: inherit; color: inherit; }
     var aberto = get(chavePai) === valorAbre;
     var orfao = !aberto && !!get(chaveDep);
     if (!aberto && !orfao) { return ""; }
-    if (!orfao) { return '<div class="condicional ver">' + conteudo + "</div>"; }
-    return '<div class="condicional ver orfao">' +
+    if (!orfao) { return '<div class="condicional ver" data-pai="' + chavePai + '">' + conteudo + "</div>"; }
+    return '<div class="condicional ver orfao" data-pai="' + chavePai + '">' +
       '<div class="aviso aviso--atencao" style="margin:0 0 8px"><span>⚠</span><div>' +
       "<b>Isto foi preenchido e a resposta agora é “" + esc(rotuloResposta || "Não") + "”.</b>" +
       "O texto continua aqui — corrija a resposta ou descarte, mas o sistema não apaga sozinho." +
@@ -2207,9 +2243,10 @@ button { font: inherit; color: inherit; }
       '<div>' + tri(k, opcoes) + "</div></div>";
   }
 
-  function campoArea(k, r, c) {
+  function campoArea(k, r, c, altura, dica) {
     return '<div class="campo campo--full"><label>' + esc(r) + " " + cod(c) + "</label>" +
-      '<textarea data-k="' + k + '">' + esc(get(k) || "") + "</textarea></div>";
+      '<textarea data-k="' + k + '"' + (altura ? ' style="min-height:' + altura + 'px"' : "") +
+      (dica ? ' placeholder="' + esc(dica) + '"' : "") + ">" + esc(get(k) || "") + "</textarea></div>";
   }
 
   /* ---- render ------------------------------------------------------------ */
@@ -2229,20 +2266,37 @@ button { font: inherit; color: inherit; }
     if (bloco === "vacin") { n = chaves.filter(function (k) { return /^vac_/.test(k); }).length; return { n: n, t: 6 }; }
     if (bloco === "antec") { n = chaves.filter(function (k) { return /^(pes_|fam_|ist_|ulcg|ant_|ng|np|na)/.test(k); }).length; return { n: n, t: 36 }; }
     if (bloco === "habit") { n = chaves.filter(function (k) { return /^hab_/.test(k); }).length; return { n: n, t: 3 }; }
+    if (bloco === "racio") { return { n: get("racio") ? 1 : 0, t: 1 }; }
     if (bloco === "condu") { n = chaves.filter(function (k) { return /^(cond_|solr|retorno)/.test(k); }).length; return { n: n, t: 6 }; }
     var lista = pref[bloco] || [];
     n = lista.filter(function (k) { return dados[k]; }).length;
     return { n: n, t: lista.length };
   }
 
+  /* Perguntas de clique sem resposta, contadas na tela desenhada -- nao numa
+     lista paralela, que envelheceria a cada pergunta nova. Contar nao cobra:
+     nenhuma e obrigatoria (convencoes, invariante 9), e em branco grava
+     "nao perguntado" (D-06). O numero so diz onde ainda ha o que olhar. */
+  function semResposta(raiz) {
+    var n = 0, t = raiz.querySelectorAll(".tri");
+    for (var i = 0; i < t.length; i++) { if (!t[i].querySelector(".on")) { n++; } }
+    return { n: n, t: t.length };
+  }
+
   function desenhaTrilho() {
     trilho.innerHTML = BLOCOS.map(function (b) {
       var p = preenchidos(b.id);
       var cls = p.n === 0 ? "" : (p.n >= p.t ? "pronto" : "parcial");
+      var sec = document.getElementById("sec-" + b.id);
+      var f = sec ? semResposta(sec).n : 0;
       return '<button class="trilho__item' + (b.id === blocoAtivo ? " ativo" : "") + '" data-bloco="' + b.id + '">' +
         '<span class="rotulo">' + esc(b.nome) + "</span>" +
+        (f ? '<span class="trilho__falta" title="' + f + ' sem resposta">' + f + "</span>" : "") +
         '<span class="trilho__marca ' + cls + '" title="' + p.n + " de ~" + p.t + ' preenchidos"></span></button>';
     }).join("");
+    var tot = semResposta(painel);
+    document.getElementById("pendentes").innerHTML = tot.t ? "<b>" + tot.n + "</b> de " + tot.t +
+      " perguntas sem resposta · nenhuma impede finalizar: em branco grava “não perguntado”" : "";
   }
 
   /* O fullPIERS e um modelo de risco NA PRE-ECLAMPSIA, nao um escore geral.
@@ -2298,15 +2352,54 @@ button { font: inherit; color: inherit; }
      dentro de render(): render() tambem roda em redesenhos DENTRO do mesmo
      bloco (REDESENHA, condicionais), onde perder a posicao de leitura seria
      regressao, nao correcao. */
+  /* Rolagem unica (D-41, que devolve a D-01 ao que ela descreve): todos os
+     blocos estao desenhados em sequencia, e o trilho virou indice -- clicar
+     ROLA ate o bloco. blocoAtivo passou a ser "o bloco que esta a vista",
+     acompanhado por acompanharRolagem(). */
+  var cliqueTrilho = null;
+  function irPara(id) {
+    var sec = document.getElementById("sec-" + id);
+    if (!sec) { return; }
+    painel.scrollTop += sec.getBoundingClientRect().top - painel.getBoundingClientRect().top;
+  }
   function mudarBloco(id) {
     blocoAtivo = id;
-    render();
-    painel.scrollTop = 0;
+    cliqueTrilho = id;
+    irPara(id);
+    marcarAtivo();
+    var primeira = document.querySelector("#sec-" + id + " .tri, #sec-" + id + " input, #sec-" + id + " textarea");
+    if (primeira) { primeira.focus({ preventScroll: true }); }
   }
+  function marcarAtivo() {
+    var its = trilho.querySelectorAll(".trilho__item");
+    for (var i = 0; i < its.length; i++) { its[i].classList.toggle("ativo", its[i].dataset.bloco === blocoAtivo); }
+    desenhaPiers();
+  }
+  /* O bloco a vista e o ultimo cujo topo ja passou do alto do painel. No fim
+     da rolagem os blocos curtos (Calculadoras) nunca chegam ao alto -- ali
+     vale o que foi clicado no trilho, se ele estiver visivel. */
+  function acompanharRolagem() {
+    var topo = painel.getBoundingClientRect().top + 60, cand = BLOCOS[0].id;
+    BLOCOS.forEach(function (b) {
+      var sec = document.getElementById("sec-" + b.id);
+      if (sec && sec.getBoundingClientRect().top <= topo) { cand = b.id; }
+    });
+    var fim = painel.scrollTop + painel.clientHeight >= painel.scrollHeight - 4;
+    if (fim && cliqueTrilho) {
+      var sc = document.getElementById("sec-" + cliqueTrilho).getBoundingClientRect();
+      if (sc.top < painel.getBoundingClientRect().bottom) { cand = cliqueTrilho; }
+    }
+    if (cand !== blocoAtivo) { blocoAtivo = cand; marcarAtivo(); }
+  }
+  painel.addEventListener("scroll", acompanharRolagem, { passive: true });
+  painel.addEventListener("wheel", function () { cliqueTrilho = null; }, { passive: true });
+  painel.addEventListener("touchmove", function () { cliqueTrilho = null; }, { passive: true });
 
   function render() {
     var ativo = document.activeElement;
     var foco = ativo && ativo.dataset ? (ativo.dataset.k || ativo.dataset.gl || ativo.dataset.ex) : null;
+    var focoTri = ativo && ativo.dataset ? (ativo.dataset.tri || ativo.dataset.exTri) : null;
+    var focoTriAttr = ativo && ativo.dataset && ativo.dataset.tri ? "data-tri" : "data-ex-tri";
     var pos = null;
     // type="date" e "number" lancam ao ler selectionStart. Nenhum campo que
     // dispara redesenho pode ser "number" (ver campoNum), mas o guarda fica:
@@ -2316,7 +2409,10 @@ button { font: inherit; color: inherit; }
       try { pos = ativo.selectionStart; } catch (e) { pos = null; }
     }
 
-    painel.innerHTML = telas[blocoAtivo] ? telas[blocoAtivo]() : "";
+    painel.innerHTML = BLOCOS.map(function (b) {
+      return '<section class="bloco-sec" id="sec-' + b.id + '" data-sec="' + b.id + '">' +
+        (telas[b.id] ? telas[b.id]() : "") + "</section>";
+    }).join("");
     ajustarRotulos();
     desenhaTrilho();
     desenhaPiers();
@@ -2340,6 +2436,10 @@ button { font: inherit; color: inherit; }
         novo.focus({ preventScroll: true });
         if (pos !== null) { try { novo.setSelectionRange(pos, pos); } catch (e) { /* input sem seleção */ } }
       }
+    }
+    if (focoTri) {
+      var t = painel.querySelector("[" + focoTriAttr + '="' + focoTri + '"]');
+      if (t) { t.focus({ preventScroll: true }); }
     }
   }
 
@@ -2644,11 +2744,13 @@ button { font: inherit; color: inherit; }
       blocos.push("EXAMES DE IMAGEM\n" + linhasImg.join("\n"));
     }
 
+    bloco("Raciocínio clínico", [get("racio") || ""]);
+
     bloco("Condutas", [
       secao("Orientações", ORIENTACOES.map(function (o) {
         return get("cond_" + o.id) === "sim" ? o.n : "";
       })),
-      item("Conduta e plano", "plan"),
+      item("Orientações, conduta e plano", "plan"),
       itemDet("Solicito rotina de exames", "solr", "solq", EXP_SIMNAO),
       (function () {
         var sem = parseInt(get("retorno"), 10);
@@ -2871,7 +2973,7 @@ button { font: inherit; color: inherit; }
     "pes_anticoag": [["pes_uso_anticoagulantes","estado_clinico"]],
     "plan": [["cond_planos","text"]], "plaq": [["plaquetas","numeric"]],
     "prontuario": [["prontuario","text"]], "psist": [["pa_sistolica","integer"]],
-    "quea": [["queixas_atuais","text"]], "retorno": [["cond_retorno_semanas","integer"]],
+    "quea": [["queixas_atuais","text"]], "racio": [["raciocinio_clinico","text"]], "retorno": [["cond_retorno_semanas","integer"]],
     "rh": [["fator_rh","fator_rh"]], "solq": [["cond_exames_quais","text"]],
     "solr": [["cond_solicita_exames","estado_clinico"]],
     "soro_antihbs": [["soro_anti_hbs","sorologia"]],
@@ -3066,6 +3168,13 @@ button { font: inherit; color: inherit; }
     return { v: String(v) };
   }
 
+  /* Coluna que o contrato ja tem e o banco AINDA NAO. Mandar a chave derrubaria
+     o INSERT inteiro com PGRST204 -- o modo de falha das sorologias e do HPP.
+     Enquanto a migracao nao for aplicada E conferida (conferir_supabase.py),
+     o campo fica de fora da gravacao, o popup diz qual, e o texto segue na
+     exportacao. Esvaziar esta lista e o passo seguinte a conferencia. */
+  var AGUARDA_MIGRACAO = { raciocinio_clinico: "014" };
+
   function montarRegistro(protocolo) {
     var linha = {}, problemas = [], semColuna = [];
     Object.keys(dados).forEach(function (k) {
@@ -3074,6 +3183,7 @@ button { font: inherit; color: inherit; }
       var v = dados[k];
       if (v === "" || v === null || v === undefined) { return; }
       if (!c) { semColuna.push(k); return; }
+      if (AGUARDA_MIGRACAO[c[0][0]]) { semColuna.push(k); return; }
       var r = converterValor(c[0][1], v);
       if (r.erro) { problemas.push(k + ": " + r.erro); return; }
       /* Uma chave pode alimentar MAIS DE UMA coluna. Os pares de sorologia
@@ -3304,8 +3414,10 @@ button { font: inherit; color: inherit; }
        rede para o proximo que a tela ganhar antes do contrato -- quem atendeu
        precisa saber antes de fechar. */
     if (e.semColuna && e.semColuna.length) {
-      topicos.push("<b>Não foi gravado</b> (sem coluna no contrato): " +
-        esc(e.semColuna.join(", ")) + ". Está no texto da exportação.");
+      topicos.push("<b>Não foi gravado</b> (a coluna ainda não existe no banco): " +
+        esc(e.semColuna.map(function (k) {
+          return k === "racio" ? "raciocínio clínico" : k;
+        }).join(", ")) + ". Está no texto da exportação.");
     }
     if (e.problemas && e.problemas.length) {
       topicos.push("<b>Não foi gravado</b> (o contrato não tem valor para a resposta): " +
@@ -3400,7 +3512,10 @@ button { font: inherit; color: inherit; }
     if (t.dataset.exNovo) {
       exames.push({});
       exameEdit = exames.length - 1;
-      render(); painel.scrollTop = painel.scrollHeight; return;
+      render();
+      var fimImg = document.getElementById("sec-imagem").getBoundingClientRect().bottom;
+      painel.scrollTop += fimImg - painel.getBoundingClientRect().bottom;
+      return;
     }
     if (t.dataset.exEditar) {
       var iEd = parseInt(t.dataset.exEditar, 10);
@@ -3601,7 +3716,53 @@ button { font: inherit; color: inherit; }
     document.getElementById("modal").style.display = "none";
   }
 
+  /* ---- resposta pelo teclado (D-41) ------------------------------------ *
+     Com o controle de estados em foco: 1, 2, 3 escolhem a opcao daquela
+     posicao, 0 / Backspace / Delete voltam para "nao perguntado", setas
+     sobem e descem. E UMA resposta por tecla e por pergunta -- nada de
+     marcacao em massa (D-24). A tecla passa pelo mesmo clique do mouse, para
+     nao existir um segundo caminho de gravacao. Depois de responder, o cursor
+     vai para o "quais" se a resposta o abriu, senao para a proxima pergunta. */
+  function controles() { return Array.prototype.slice.call(painel.querySelectorAll(".tri")); }
+  function chaveTri(t) { return t.dataset.tri ? '[data-tri="' + t.dataset.tri + '"]' : '[data-ex-tri="' + t.dataset.exTri + '"]'; }
+  function focarControle(t) {
+    if (!t) { return; }
+    t.focus({ preventScroll: true });
+    var r = t.getBoundingClientRect(), p = painel.getBoundingClientRect();
+    if (r.bottom > p.bottom - 20) { painel.scrollTop += r.bottom - p.bottom + 80; }
+    else if (r.top < p.top + 10) { painel.scrollTop -= p.top - r.top + 80; }
+  }
+  function tecladoTri(ev) {
+    var a = document.activeElement;
+    if (a && a.parentElement && a.tagName === "BUTTON" && a.parentElement.classList.contains("tri")) { a = a.parentElement; }
+    if (!a || !a.classList || !a.classList.contains("tri") || ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
+    var sel = chaveTri(a), lista = controles(), i = lista.indexOf(a);
+    if (/^[1-9]$/.test(ev.key)) {
+      var bt = a.querySelectorAll("button")[+ev.key - 1];
+      if (!bt) { return false; }
+      var desmarca = bt.classList.contains("on");
+      bt.click();
+      var novo = painel.querySelector(sel);
+      if (desmarca) { focarControle(novo); return true; }
+      var pai = a.dataset.tri && painel.querySelector('.condicional[data-pai="' + a.dataset.tri + '"]:not(.orfao)');
+      var campo = pai && pai.querySelector("textarea, input, select");
+      if (campo) { campo.focus(); return true; }
+      lista = controles();
+      focarControle(lista[lista.indexOf(novo) + 1] || novo);
+      return true;
+    }
+    if (ev.key === "0" || ev.key === "Backspace" || ev.key === "Delete") {
+      var on = a.querySelector("button.on");
+      if (on) { on.click(); focarControle(painel.querySelector(sel)); }
+      return true;
+    }
+    if (ev.key === "ArrowDown" || ev.key === "ArrowRight") { focarControle(lista[i + 1]); return true; }
+    if (ev.key === "ArrowUp" || ev.key === "ArrowLeft") { focarControle(lista[i - 1]); return true; }
+    return false;
+  }
+
   document.addEventListener("keydown", function (ev) {
+    if (tecladoTri(ev)) { ev.preventDefault(); return; }
     if (ev.key === "Escape") {
       // O popup de exportacao fecha primeiro -- e sem confirmacao, porque o
       // texto e regeneravel; os DADOS continuam no formulario atras dele.
