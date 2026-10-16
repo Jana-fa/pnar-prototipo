@@ -121,7 +121,11 @@ button { font: inherit; color: inherit; }
 @media (max-width: 860px) { .trilho__falta { display: none; } .trilho__falta + .trilho__marca { margin-left: auto; } }
 .pendentes { font-size: 11.5px; color: var(--texto); }
 .pendentes b { color: var(--texto-forte); font-variant-numeric: tabular-nums; }
-.painel { flex: 1; overflow-y: auto; padding: 18px 22px 28px; min-width: 0; }
+/* overflow-anchor: none -- o redesenho troca o painel inteiro (render), e a
+   ancoragem de rolagem do navegador reposicionava a tela a cada clique ou
+   tecla: ~400 px num clique em Rh, ~350 px ao digitar creatinina. Sem
+   ancoragem, a rolagem fica onde a pessoa deixou. */
+.painel { flex: 1; overflow-y: auto; padding: 18px 22px 28px; min-width: 0; overflow-anchor: none; }
 .painel__titulo {
   font-size: 16px; color: var(--texto-forte); font-weight: 600;
   margin: 0 0 3px; display: flex; align-items: baseline; gap: 10px;
@@ -163,6 +167,10 @@ button { font: inherit; color: inherit; }
 }
 .campo textarea { resize: vertical; min-height: 54px; }
 .campo__dica { font-size: 10.5px; color: var(--texto-fraco); }
+/* Data de coleta de um exame (D-43): cinza enquanto herda a data da secao,
+   cor normal quando o exame tem data propria. */
+input.data-exame { margin-top: 4px; padding: 2px 4px; font-size: 11.5px; border: 1px solid #c7d0d9; border-radius: 3px; }
+input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
 .campo--derivado input { background: var(--verde-fraco); border-style: dashed; }
 .selo-derivado {
   font-size: 9.5px; background: var(--verde-fraco); color: var(--verde-esc);
@@ -539,10 +547,13 @@ button { font: inherit; color: inherit; }
     { eixo: "Hipertensivo", id: "pree", nome: "Pré-eclâmpsia", ant: "311", atu: "361" },
     { eixo: "Hipertensivo", id: "ecla", nome: "Eclâmpsia", ant: "307", atu: "357" },
     { eixo: "Hipertensivo", id: "hellp", nome: "Síndrome HELLP", dica: "hemólise, enzimas hepáticas elevadas, plaquetopenia", ant: "314", atu: "364" },
-    { eixo: "Placentário", id: "dplac", nome: "Descolamento prematuro de placenta", ant: "305", atu: "355" },
+    /* soAnt: perguntada so nas gestacoes anteriores. DPP e RPM sairam do eixo
+       desta gestacao a pedido dos medicos (D-42, 2026-10-14); as colunas 355 e
+       367 continuam no banco, sem tela. */
+    { eixo: "Placentário", id: "dplac", nome: "Descolamento prematuro de placenta", ant: "305", atu: "355", soAnt: true },
     { eixo: "Placentário", id: "pprev", nome: "Placenta prévia", ant: "310", atu: "360" },
     { eixo: "Prematuridade", id: "tpp", nome: "Trabalho de parto pré-termo", ant: "316", atu: "366" },
-    { eixo: "Prematuridade", id: "rpm", nome: "Rotura prematura de membranas", dica: "amniorrexe prematura", ant: "303", atu: "367" },
+    { eixo: "Prematuridade", id: "rpm", nome: "Rotura prematura de membranas", dica: "amniorrexe prematura", ant: "303", atu: "367", soAnt: true },
     { eixo: "Metabólico", id: "dmg", nome: "Diabetes gestacional", ant: "306", atu: "356" },
     { eixo: "Infeccioso", id: "itu", nome: "Infecção do trato urinário", ant: "308", atu: "358" },
     { eixo: "Infeccioso", id: "sifi", nome: "Sífilis", ant: "312", atu: "362" },
@@ -551,6 +562,17 @@ button { font: inherit; color: inherit; }
     { eixo: "Imuno-hematológico", id: "anem", nome: "Anemia", ant: "304", atu: "354" },
     { eixo: "Gemelaridade", id: "tff", nome: "Síndrome da transfusão feto-fetal", ant: "315", atu: "365" }
   ];
+  // As condicoes de um eixo: a tela, a exportacao e a contagem leem daqui.
+  function condicoesDoEixo(prefixo) {
+    return CONDICOES.filter(function (c) { return !(prefixo === "atu_" && c.soAnt); });
+  }
+  // Chaves do bloco de gestacoes anteriores: o aviso de orfao e a primigesta
+  // da HPP leem a mesma lista.
+  function chavesGestAnt() {
+    var l = ["ng", "np", "na", "ncesa", "ano_ult_parto", "out3", "ant_hpp"];
+    CONDICOES.forEach(function (c) { l.push("ant_" + c.id); });
+    return l;
+  }
 
   /* GRAMATICA DE LINHA UNICA. Toda pergunta de condicao -- em qualquer bloco --
      tem a mesma anatomia: rotulo com largura fixa, codigo da planilha, controle
@@ -568,9 +590,9 @@ button { font: inherit; color: inherit; }
     { id: "aler", nome: "Alergias", cod: "200", det: "201", detRot: "Quais alergias?" },
     { id: "canc", nome: "Câncer", cod: "202", det: "203", detRot: "Qual tipo de câncer?" },
     { id: "ciru", nome: "Cirurgias", cod: "204", det: "205", detRot: "Quais cirurgias?" },
-    { id: "diab", nome: "Diabetes", cod: "206", par: "família" },
+    { id: "diab", nome: "Diabetes", cod: "206" },
     { id: "epil", nome: "Epilepsia", cod: "207" },
-    { id: "hipe", nome: "Hipertensão crônica", cod: "208", par: "família" },
+    { id: "hipe", nome: "Hipertensão crônica", cod: "208" },
     { id: "infe", nome: "Infertilidade", cod: "209" },
     { id: "renal", nome: "Doença renal crônica", cod: null },
     // det: true = tem condicional "quais" mas SEM codigo de planilha (variavel
@@ -579,22 +601,21 @@ button { font: inherit; color: inherit; }
     { id: "autoimune", nome: "Doença autoimune", cod: null, det: true,
       detRot: "Qual doença autoimune?", dica: "lúpus, SAF, outra" },
     { id: "tran", nome: "Transfusão", cod: "210" },
-    { id: "tube", nome: "Tuberculose", cod: "211", par: "família" },
+    { id: "tube", nome: "Tuberculose", cod: "211" },
     // coagul/anticoag: variaveis novas, insumo da calculadora de HPP (D-39).
     { id: "coagul", nome: "Coagulopatia", cod: null },
     { id: "anticoag", nome: "Uso de anticoagulantes", cod: null }
   ];
 
-  /* Antecedentes familiares: secao propria, nunca coluna. As 3 que a planilha
-     pergunta dos dois lados mostram um eco read-only da resposta dela. */
+  /* Antecedentes familiares: secao propria, nunca coluna. Diabetes (250),
+     gestacao gemelar (253), hipertensao cronica (254) e tuberculose (256)
+     sairam da tela a pedido dos medicos (D-42, 2026-10-14) -- as colunas
+     ficam, e "Outras observacoes familiares" (257) e onde o resto cabe.
+     Pre-eclampsia e eclampsia viraram UMA pergunta (D-43), em coluna nova:
+     juntar na 251 mudaria o que uma linha ja gravada significa. */
   var FAMILIARES = [
-    { id: "diab", nome: "Diabetes", cod: "250", eco: "diab" },
-    { id: "pree", nome: "Pré-eclâmpsia", cod: "251" },
-    { id: "ecla", nome: "Eclâmpsia", cod: "252" },
-    { id: "gemel", nome: "Gestação gemelar", cod: "253" },
-    { id: "hipe", nome: "Hipertensão crônica", cod: "254", eco: "hipe" },
-    { id: "malf", nome: "Malformações", cod: "255" },
-    { id: "tube", nome: "Tuberculose", cod: "256", eco: "tube" }
+    { id: "peec", nome: "Pré-eclâmpsia/eclâmpsia", cod: null },
+    { id: "malf", nome: "Malformações", cod: "255" }
   ];
 
   var HABITOS = [
@@ -613,8 +634,9 @@ button { font: inherit; color: inherit; }
       { id: "vigil", nome: "Vígil", cod: "400" }, { id: "orien", nome: "Orientada", cod: "401" },
       { id: "hidra", nome: "Hidratada", cod: "402" },
       { id: "afebr", nome: "Afebril", cod: "404" } ] },
-    { g: "Tireoide", itens: [ { id: "tire", nome: "Tireoide", cod: "409", normal: "elástica, sem nodulações",
-      det: true, detRot: "O que foi encontrado na tireoide?" } ] },
+    // Tireoide (409 e o texto de alteracao) saiu do exame fisico a pedido dos
+    // medicos (D-42, 2026-10-14). As colunas ficam; TSH e T4 livre seguem nos
+    // exames.
     { g: "Ausculta pulmonar", itens: [
       { id: "murv", nome: "Murmúrio vesicular", cod: "410", normal: "presente e simétrico" },
       { id: "ruid", nome: "Ruídos adventícios", cod: "411", normal: "ausentes" } ] },
@@ -622,8 +644,10 @@ button { font: inherit; color: inherit; }
       { id: "ritm", nome: "Ritmo cardíaco", cod: "412", normal: "regular, 2 tempos" },
       { id: "buln", nome: "Bulhas", cod: "413", normal: "normofonéticas" },
       { id: "sopr", nome: "Sopros", cod: "414", normal: "ausentes" } ] },
+    // "Nao avaliado" so nas mamas (D-43): quem examina declara que nao
+    // examinou -- e valor gravado, diferente de deixar em branco (D-06).
     { g: "Mamas", itens: [ { id: "mams", nome: "Mamas", cod: "415", normal: "sem alterações",
-      det: "416", detRot: "Quais alterações nas mamas?" } ] },
+      det: "416", detRot: "Quais alterações nas mamas?", naoAvaliado: "não avaliadas" } ] },
     // 420 nao tinha "quais" -- Alterado ficava mudo sobre o que foi visto.
     // exdet_espe e variavel NOVA, no mesmo molde do 416 das mamas.
     { g: "Exame especular", itens: [ { id: "espe", nome: "Exame especular", cod: "420",
@@ -669,21 +693,23 @@ button { font: inherit; color: inherit; }
      nao. A tela nao conclui nada a partir do par. */
   var OP_SORO = ["Não reagente", "Reagente", "Sem resultado"];
   var SOROLOGIAS = [
-    { id: "vdrl", nome: "Sífilis (VDRL)", cods: "550", op: OP_SORO, ruim: "Reagente", det: "551", detRot: "Titulação" },
-    { id: "hiv", nome: "HIV (anti-HIV)", cods: "552", op: OP_SORO, ruim: "Reagente" },
-    { id: "hbsag", grupo: "Hepatite B", nome: "HBsAg (antígeno de superfície)", cods: "553", op: OP_SORO, ruim: "Reagente" },
-    { id: "antihbs", grupo: "Hepatite B", nome: "Anti-HBs (anticorpo de superfície)", cods: "554", op: OP_SORO },
-    { id: "hepc", nome: "Hepatite C (anti-HCV)", cods: "555", op: OP_SORO, ruim: "Reagente" },
-    { id: "toxoigg", grupo: "Toxoplasmose", nome: "IgG", cods: "556", op: OP_SORO },
-    { id: "toxoigm", grupo: "Toxoplasmose", nome: "IgM", cods: "557", op: OP_SORO, ruim: "Reagente" },
-    { id: "cmvigg", grupo: "Citomegalovírus", nome: "IgG", cods: "558", op: OP_SORO },
-    { id: "cmvigm", grupo: "Citomegalovírus", nome: "IgM", cods: "559", op: OP_SORO, ruim: "Reagente" },
-    { id: "htlv", nome: "HTLV I e II", cods: "560", op: OP_SORO, ruim: "Reagente" }
+    { id: "vdrl", col: "soro_vdrl_data", rot: "VDRL", nome: "Sífilis (VDRL)", cods: "550", op: OP_SORO, ruim: "Reagente", det: "551", detRot: "Titulação" },
+    { id: "hiv", col: "soro_hiv_data", rot: "HIV", nome: "HIV (anti-HIV)", cods: "552", op: OP_SORO, ruim: "Reagente" },
+    { id: "hbsag", col: "soro_hbsag_data", rot: "HBsAg", grupo: "Hepatite B", nome: "HBsAg (antígeno de superfície)", cods: "553", op: OP_SORO, ruim: "Reagente" },
+    { id: "antihbs", col: "soro_anti_hbs_data", rot: "anti-HBs", grupo: "Hepatite B", nome: "Anti-HBs (anticorpo de superfície)", cods: "554", op: OP_SORO },
+    { id: "hepc", col: "soro_anti_hcv_data", rot: "anti-HCV", nome: "Hepatite C (anti-HCV)", cods: "555", op: OP_SORO, ruim: "Reagente" },
+    { id: "toxoigg", col: "soro_toxo_igg_data", rot: "toxoplasmose IgG", grupo: "Toxoplasmose", nome: "IgG", cods: "556", op: OP_SORO },
+    { id: "toxoigm", col: "soro_toxo_igm_data", rot: "toxoplasmose IgM", grupo: "Toxoplasmose", nome: "IgM", cods: "557", op: OP_SORO, ruim: "Reagente" },
+    { id: "cmvigg", col: "soro_cmv_igg_data", rot: "CMV IgG", grupo: "Citomegalovírus", nome: "IgG", cods: "558", op: OP_SORO },
+    { id: "cmvigm", col: "soro_cmv_igm_data", rot: "CMV IgM", grupo: "Citomegalovírus", nome: "IgM", cods: "559", op: OP_SORO, ruim: "Reagente" },
+    { id: "htlv", col: "soro_htlv_data", rot: "HTLV", nome: "HTLV I e II", cods: "560", op: OP_SORO, ruim: "Reagente" }
   ];
 
   var VACINAS = [
-    { id: "dt", nome: "Dupla adulto (dT)", cod: "600" }, { id: "dtpa", nome: "Tríplice acelular (dTpa)", cod: "601" },
-    { id: "vhepb", nome: "Hepatite B", cod: "602" }, { id: "infl", nome: "Influenza", cod: "603" },
+    // doses: uma data por dose (D-43). dT tem duas porque a terceira dose do
+    // esquema da gestante e a dTpa, que tem linha propria.
+    { id: "dt", nome: "Dupla adulto (dT)", cod: "600", doses: 2 }, { id: "dtpa", nome: "Tríplice acelular (dTpa)", cod: "601" },
+    { id: "vhepb", nome: "Hepatite B", cod: "602", doses: 3 }, { id: "infl", nome: "Influenza", cod: "603" },
     { id: "covi", nome: "Covid-19", cod: "604" }, { id: "vsr", nome: "Vírus sincicial (VSR)", cod: "605" }
   ];
 
@@ -726,24 +752,24 @@ button { font: inherit; color: inherit; }
     "Médio incompleto", "Médio completo", "Superior incompleto", "Superior completo",
     "Pós-graduação", "Não informado"];
 
-  /* Ordem da anamnese real: quem ela e -> o que ela faz -> exame -> exames ->
-     esta gestacao -> conduta. "Gestação atual" foi deslocada para logo ANTES
-     de "Condutas" (pedido da medica, 2026-08-09): a IG e as intercorrencias
-     desta gestacao sao o que da forma ao plano -- retorno em N semanas,
-     orientacoes -- entao ficam lidas imediatamente antes de decidi-las, nao
-     isoladas cedo na consulta, longe de onde a informacao e usada.
+  /* Ordem da anamnese real: quem ela e -> o que ja teve -> o que ela faz ->
+     esta gestacao -> exame -> exames -> conduta. "Gestação atual" voltou para
+     antes do "Exame físico" (rodada 1 de feedback dos medicos, D-42,
+     2026-10-14), que e a ordem da D-02 e a da exportacao. Desfaz o pedido da
+     medica de 2026-08-09 (logo antes de Condutas), com o aval dela: a IG que
+     motivava aquele pedido continua a vista no cabecalho fixo ("IG hoje").
      Antecedentes vinha DEPOIS de intercorrencias, o que fazia os dois parecerem
      o mesmo assunto. Agora antecedentes vem antes, e nao ha coluna de familia
      dentro da grade obstetrica. */
   var BLOCOS = [
     { id: "ident", nome: "Identificação" }, { id: "antec", nome: "Antecedentes" },
     { id: "habit", nome: "Hábitos" },
+    { id: "gesta", nome: "Gestação atual" },
     { id: "exame", nome: "Exame físico" },
     { id: "labor", nome: "Exames e sorologias" },
     { id: "imagem", nome: "Exames de imagem" },
     { id: "glice", nome: "Controle glicêmico" },
     { id: "vacin", nome: "Vacinas" },
-    { id: "gesta", nome: "Gestação atual" },
     { id: "racio", nome: "Raciocínio clínico" },
     { id: "condu", nome: "Condutas" }, { id: "calc", nome: "Calculadoras" }
   ];
@@ -880,6 +906,29 @@ button { font: inherit; color: inherit; }
    * ====================================================================== */
   var CREAT_MGDL_PARA_UMOLL = 88.4;
 
+  /* Plaquetas em mil/mm3. Acima de 900 o numero quase sempre e a contagem
+     absoluta digitada sem converter -- 80000 em vez de 80 -- e entraria nas
+     duas calculadoras errado por mil, para o lado tranquilizador na HPP. Acima
+     do teto nao e insumo: o cartao, o bloco de exames e a exportacao
+     sinalizam, e a tela nao adivinha a unidade (mesma regra da creatinina sem
+     unidade, D-19). SO TETO, sem piso: um valor baixo (3 = 3.000/mm3) e
+     plaquetopenia grave em qualquer leitura de unidade, e recusa-lo sairia do
+     lado tranquilizador -- foi o defeito da primeira versao desta guarda. */
+  var PLAQ_MAX = 900;
+  function plaquetasMil() {
+    var p = parseFloat(get("plaq"));
+    if (isNaN(p)) { return { v: NaN, fora: false }; }
+    if (p > PLAQ_MAX) { return { v: NaN, fora: true }; }
+    return { v: p, fora: false };
+  }
+  function avisoPlaquetas() {
+    if (!plaquetasMil().fora) { return ""; }
+    return '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
+      "<b>Plaquetas fora da faixa (acima de 900 mil/mm³).</b> O campo é em mil/mm³: 150.000/mm³ " +
+      "se digita 150. Fora da faixa, as plaquetas não entram no fullPIERS nem na HPP — o sistema não converte sozinho." +
+      "</div></div>";
+  }
+
   /* ---- ALINHAMENTO COM A CALCULADORA OFICIAL -----------------------------
      Decisao da medica, 2026-08-09 (D-27). O numero desta tela passa a bater
      com o da calculadora do PRE-EMPT/UBC, mantida pelos proprios autores do
@@ -948,11 +997,24 @@ button { font: inherit; color: inherit; }
 
     /* igSem em semanas decimais; a IG informada por USG ("24s 3d") tem de ser
        interpretada, e se nao der para ler o numero o insumo conta como ausente
-       em vez de virar zero. */
+       em vez de virar zero. A leitura e ESTRITA (2026-10-14): o texto inteiro
+       tem de ser semanas e, opcionalmente, dias de 0 a 6 -- "30s", "30s 2d",
+       "30 sem 2 d", "30 semanas e 2 dias". A leitura antiga pegava o primeiro
+       numero com "s" e o proximo numero qualquer: "30s por USG de 12s" virava
+       31s5d, "30,5s" virava 5 semanas e "30s 9d" passava. */
     var igCalc = calcIG(), igInfTxt = get("ig_informada"), igSem = null;
+    var igIlegivel = false, igForaFaixa = false;
     if (igInfTxt) {
-      var m = String(igInfTxt).match(/(\d+)\s*s(?:em)?\D*(\d+)?/i);
+      // Tambem "30+2", "30s+2d" e "30s, 2d" (revisao cega): sem ambiguidade.
+      var igT = String(igInfTxt).trim();
+      var m = igT.match(/^(\d{1,3})\s*(?:semanas?|sem|s)\.?(?:\s*(?:,|e|\+)?\s*([0-6])\s*(?:dias?|d)\.?)?$/i) ||
+        igT.match(/^(\d{1,3})\s*\+\s*([0-6])\s*(?:dias?|d)?\.?$/i);
       if (m) { igSem = parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 7 : 0); }
+      else { igIlegivel = true; }
+      /* Acima de 45 semanas nao e gestacao -- e quase sempre um zero a mais
+         ("280s" por "28s"), que dava fullPIERS de 0,0%. Mesmo teto que a IG
+         pela DUM ja tinha (calcIG, 320 dias). Nao e insumo, e o cartao diz. */
+      if (igSem !== null && igSem > 45) { igSem = null; igForaFaixa = true; }
     } else if (igCalc) {
       igSem = igCalc.sem + igCalc.dias / 7;
     }
@@ -966,7 +1028,8 @@ button { font: inherit; color: inherit; }
       else if (crUnid === "umoll") { crUmol = crBruto; }
     }
 
-    var plt = parseFloat(get("plaq"));          // mil/mm3 == x10^9/L
+    var pq = plaquetasMil();
+    var plt = pq.v;                             // mil/mm3 == x10^9/L
     var ast = parseFloat(get("tgo"));           // U/L
     var spo2Num = parseFloat(spo2Usada);
 
@@ -984,9 +1047,9 @@ button { font: inherit; color: inherit; }
     var pode = igSem !== null && dorDisp !== null && crUmol !== null &&
                !isNaN(plt) && !isNaN(ast) && !isNaN(spo2Num);
     return {
-      igCalc: igCalc, igInfTxt: igInfTxt, igSem: igSem,
+      igCalc: igCalc, igInfTxt: igInfTxt, igSem: igSem, igIlegivel: igIlegivel, igForaFaixa: igForaFaixa,
       crBruto: crBruto, crUnid: crUnid, crUmol: crUmol,
-      plt: plt, ast: ast,
+      plt: plt, pltFora: pq.fora, ast: ast,
       spo2Imputada: spo2Imputada, spo2Usada: spo2Usada, spo2Num: spo2Num,
       dorDisp: dorDisp, pode: pode,
       prob: pode ? fullPiers(igSem, dorDisp, crUmol, plt, ast, spo2Num) : null
@@ -1006,35 +1069,84 @@ button { font: inherit; color: inherit; }
          ("superdistensao uterina");
        - hematocrito: nao ha campo (so hemoglobina, e Hb->Ht seria inferencia
          clinica, D-05); miomatose uterina: so aparece no Quadro 4, nunca no
-         Quadro 5 que esta sendo adaptado.
+         Quadro 5 que esta sendo adaptado;
+       - descolamento prematuro de placenta nesta gestacao: e fator alto do
+         Quadro 5, mas a pergunta saiu da tela a pedido dos medicos (D-42,
+         2026-10-14). Custo aceito pela medica: a HPP de quem teve DPP nesta
+         gestacao pode sair mais baixa do que seria.
      Insumo ausente nunca vira "sem risco" -- fica de fora da contagem e
-     aparece em "dados insuficientes", igual insumosPiers(). */
+     aparece em "dados insuficientes", igual insumosPiers(). "Nao sabe" e o
+     mesmo caso: nao afirma ausencia, entao nao conta como respondido.
+     E so classifica com seguranca (pedido de 2026-10-14): cada fator, sozinho,
+     pode subir a classificacao, entao moderado e baixo exigem TODOS os
+     fatores respondidos; alto sai assim que confirmado, porque o que falta
+     nao o baixa. Sem isso, tier e null: "Sem classificacao". */
+  function fatorSimNao(n, chave) {
+    var v = get(chave);
+    return { n: n, tem: v === "sim" || v === "nao", sim: v === "sim", nsabe: v === "nsabe" };
+  }
   function insumosHPP() {
-    var plaq = parseFloat(get("plaq"));               // mesmo insumo do fullPIERS
+    // Mesmo campo do fullPIERS, digitado em mil/mm3 (250 = 250.000/mm3).
+    // O corte de 100.000/mm3 do Quadro 5 e, nessa unidade, 100. Fora da faixa
+    // do campo nao e insumo (plaquetasMil).
+    var pq = plaquetasMil(), plaq = pq.v;
     var np = parseInt(get("np"), 10), ncesa = parseInt(get("ncesa"), 10);
+    /* Primigesta: sem gestacao anterior, cesarea previa, partos vaginais e HPP
+       anterior nao se aplicam -- saem do cartao e da exportacao, e nada e
+       gravado no lugar deles: as celulas ficam vazias. So com os campos de
+       gestacao anterior vazios: numero digitado antes de a resposta virar
+       "Nao" (orfao, D-16) e usado, nunca presumido. */
+    var primigesta = get("gest_ant") === "nao" && !chavesGestAnt().some(function (k) { return get(k); });
+    /* O corte e "4 ou mais partos VAGINAIS" (Quadro 3 da OPAS 2018, que o
+       Einstein reproduz como Quadro 5), e o nº de partos inclui as cesareas
+       (aviso da propria tela). "Ou 3 ou mais cesarianas" so aparece no
+       Quadro 2, que lista fatores e nao estratifica: somado, contava 3
+       cesareas duas vezes (cesarea previa + grande multipara) e dava alto.
+       Ate 3 partos afastam o fator sem saber as cesareas. Mais cesareas que
+       partos e dado incoerente (a tela avisa) e deixa o fator em falta --
+       salvo com ate 3 partos, quando nas duas leituras ha no maximo 3
+       vaginais. */
+    var vaginais = (!isNaN(np) && !isNaN(ncesa) && ncesa <= np) ? np - ncesa : NaN;
+    var vaginaisTem = !isNaN(vaginais) || (!isNaN(np) && np <= 3);
+    // Peso ou estatura fora da faixa do proprio campo (30-200 kg, 130-200 cm)
+    // nao e insumo: 1650 cm e quase sempre milimetro, e dava IMC 0,4.
     var pesoNum = parseFloat(get("peso")), estNum = parseFloat(get("estatura"));
-    var imc = (!isNaN(pesoNum) && !isNaN(estNum) && estNum > 0)
-      ? pesoNum / Math.pow(estNum / 100, 2) : null;
+    var temMedidas = !isNaN(pesoNum) && !isNaN(estNum);
+    var medidasNaFaixa = temMedidas && pesoNum >= 30 && pesoNum <= 200 && estNum >= 130 && estNum <= 200;
+    var imc = medidasNaFaixa ? pesoNum / Math.pow(estNum / 100, 2) : null;
+    /* Pre-eclampsia e hipertensao gestacional sao fator MEDIO na forma leve e
+       ALTO na grave (Quadro 3). A tela nao avalia a gravidade (D-05), mas a
+       presenca vale ao menos um moderado: soma para o escalonamento e, sozinha,
+       impede classificar -- pode ser moderado ou alto. Eclampsia e HELLP
+       entram no mesmo fator, sem a tela deduzir que sao a forma grave. */
+    var hipV = ["atu_hgest", "atu_pree", "atu_ecla", "atu_hellp"].map(get);
+    var hipSim = hipV.indexOf("sim") >= 0;
+    var hip = { n: "Pré-eclâmpsia, eclâmpsia, HELLP ou hipertensão gestacional",
+      tem: hipSim || hipV.every(function (v) { return v === "nao"; }), sim: hipSim,
+      nsabe: !hipSim && hipV.indexOf("nsabe") >= 0, gravidadeAberta: true };
 
     var altoDireto = [
-      { n: "Placenta prévia ou de inserção baixa", tem: !!get("atu_pprev"), sim: get("atu_pprev") === "sim" },
-      { n: "Suspeita de acretismo placentário", tem: !!get("atu_acret"), sim: get("atu_acret") === "sim" },
-      { n: "Descolamento prematuro de placenta", tem: !!get("atu_dplac"), sim: get("atu_dplac") === "sim" },
-      { n: "Coagulopatia", tem: !!get("pes_coagul"), sim: get("pes_coagul") === "sim" },
-      { n: "Uso de anticoagulantes", tem: !!get("pes_anticoag"), sim: get("pes_anticoag") === "sim" },
-      { n: "Plaquetas < 100.000/mm³", tem: !isNaN(plaq), sim: !isNaN(plaq) && plaq < 100000 }
+      fatorSimNao("Placenta prévia ou de inserção baixa", "atu_pprev"),
+      fatorSimNao("Suspeita de acretismo placentário", "atu_acret"),
+      // DPP nesta gestacao saiu da tela (D-42): sem campo, sai da contagem, e
+      // a nota do cartao diz por que -- em vez de ficar em "falta" para sempre.
+      fatorSimNao("Coagulopatia", "pes_coagul"),
+      fatorSimNao("Uso de anticoagulantes", "pes_anticoag"),
+      { n: "Plaquetas < 100.000/mm³", tem: !isNaN(plaq), sim: !isNaN(plaq) && plaq < 100, fora: pq.fora }
     ];
+    var hppAnt = fatorSimNao("Hemorragia pós-parto ou atonia uterina em gestação anterior", "ant_hpp");
+    hppAnt.gestAnt = true;
     var medioDireto = [
       // proxy: so cesariana previa e contavel; outra cirurgia uterina fica em texto livre (205/317)
-      { n: "Cesariana ou cirurgia uterina prévia", tem: !isNaN(ncesa), sim: !isNaN(ncesa) && ncesa >= 1 },
+      { n: "Cesariana ou cirurgia uterina prévia", tem: !isNaN(ncesa), sim: !isNaN(ncesa) && ncesa >= 1, gestAnt: true },
+      hip,
       // proxy: cobre so a gestacao multipla; polidramnio/macrossomia isolados ficam de fora (sem corte na fonte)
-      { n: "Gestação múltipla (superdistensão uterina)", tem: !!get("gest_multipla"), sim: get("gest_multipla") === "sim" },
-      { n: "Grande multípara (≥ 4 partos vaginais ou ≥ 3 cesáreas)",
-        tem: !isNaN(np) || !isNaN(ncesa),
-        sim: (!isNaN(np) && np >= 4) || (!isNaN(ncesa) && ncesa >= 3) },
-      { n: "Hemorragia pós-parto ou atonia uterina em gestação anterior", tem: !!get("ant_hpp"), sim: get("ant_hpp") === "sim" },
-      { n: "Obesidade materna (IMC > 35 kg/m²)", tem: imc !== null, sim: imc !== null && imc > 35 }
-    ];
+      fatorSimNao("Gestação múltipla (superdistensão uterina)", "gest_multipla"),
+      { n: "≥ 4 partos vaginais prévios", tem: vaginaisTem, sim: !isNaN(vaginais) && vaginais >= 4, gestAnt: true },
+      hppAnt,
+      { n: "Obesidade materna (IMC > 35 kg/m²)", tem: imc !== null, sim: imc !== null && imc > 35,
+        fora: temMedidas && !medidasNaFaixa }
+    ].filter(function (f) { return !(primigesta && f.gestAnt); });
 
     var altoAtivo = altoDireto.filter(function (f) { return f.sim; });
     var medioAtivo = medioDireto.filter(function (f) { return f.sim; });
@@ -1042,10 +1154,12 @@ button { font: inherit; color: inherit; }
 
     var tier;
     if (altoAtivo.length > 0 || medioAtivo.length >= 2) { tier = "alto"; }
+    else if (faltando.length > 0 || hip.sim) { tier = null; }
     else if (medioAtivo.length === 1) { tier = "medio"; }
     else { tier = "baixo"; }
 
-    return { altoDireto: altoDireto, medioDireto: medioDireto,
+    return { altoDireto: altoDireto, medioDireto: medioDireto, primigesta: primigesta, hipertensivo: hip.sim,
+             orfaoGest: get("gest_ant") === "nao" && !primigesta,
              altoAtivo: altoAtivo, medioAtivo: medioAtivo, faltando: faltando, tier: tier };
   }
 
@@ -1074,6 +1188,8 @@ button { font: inherit; color: inherit; }
       if (i.k === "spo2") { return { i: i, tem: true, imputado: spo2Imputada, valor: spo2Usada + "%" }; }
       if (i.k === "ig") {
         var v = igInfTxt || (igCalc ? igCalc.sem + "s " + igCalc.dias + "d" : null);
+        if (z.igForaFaixa) { return { i: i, tem: false, imputado: false, foraFaixa: true, foraTxt: "fora da faixa (até 45 semanas)", valor: null }; }
+        if (z.igIlegivel) { return { i: i, tem: false, imputado: false, foraFaixa: true, foraTxt: "não reconhecida — use o formato 30s 2d", valor: null }; }
         return { i: i, tem: igSem !== null, imputado: false, valor: v };
       }
       var g = get(i.k);
@@ -1083,9 +1199,9 @@ button { font: inherit; color: inherit; }
       if (i.k === "creat") {
         if (crUmol !== null) {
           return { i: i, tem: true, imputado: false,
-                   valor: crUnid === "mgdl"
+                   valor: (crUnid === "mgdl"
                      ? crBruto + " mg/dL = " + crUmol.toFixed(0) + " µmol/L"
-                     : crBruto + " µmol/L" };
+                     : crBruto + " µmol/L") + dataInsumo("dt_creat") };
         }
         // valor digitado sem unidade: falta, mas a linha diz O QUE falta
         if (!isNaN(crBruto)) {
@@ -1093,10 +1209,13 @@ button { font: inherit; color: inherit; }
         }
       }
       if (i.k === "plaq" && !isNaN(plt)) {
-        return { i: i, tem: true, imputado: false, valor: plt + " mil/mm³ = " + plt + " ×10⁹/L" };
+        return { i: i, tem: true, imputado: false, valor: plt + " mil/mm³ = " + plt + " ×10⁹/L" + dataInsumo(null) };
+      }
+      if (i.k === "plaq" && z.pltFora) {
+        return { i: i, tem: false, imputado: false, foraFaixa: true, foraTxt: "fora da faixa (até 900 mil/mm³)", valor: null };
       }
       if (i.k === "tgo" && !isNaN(ast)) {
-        return { i: i, tem: true, imputado: false, valor: ast + " U/L" };
+        return { i: i, tem: true, imputado: false, valor: ast + " U/L" + dataInsumo("dt_tgo") };
       }
       if (i.k === "dorp" || i.k === "ex_eupne") {
         return { i: i, tem: !!g, imputado: false, valor: ROTULO[g] || g };
@@ -1124,6 +1243,8 @@ button { font: inherit; color: inherit; }
         selo = '<span class="piers__item ok" style="cursor:default">' + esc(x.valor || "preenchido") + "</span>";
       } else if (x.semUnidade) {
         selo = '<span class="piers__item" style="cursor:default">sem a unidade</span>';
+      } else if (x.foraFaixa) {
+        selo = '<span class="piers__item" style="cursor:default">' + esc(x.foraTxt || "fora da faixa") + "</span>";
       } else {
         selo = '<span class="piers__item" style="cursor:default">falta</span>';
       }
@@ -1142,7 +1263,8 @@ button { font: inherit; color: inherit; }
       selo = "Sem cálculo";
       valorTxt = "—";
       var quem = faltando.map(function (x) {
-        return x.semUnidade ? x.i.n + " (falta a unidade)" : x.i.n;
+        return x.semUnidade ? x.i.n + " (falta a unidade)"
+          : x.foraFaixa ? x.i.n + (x.i.k === "ig" && z.igIlegivel ? " (não reconhecida)" : " (fora da faixa)") : x.i.n;
       });
       if (dorDisp === null && quem.indexOf("Dor torácica") < 0 && quem.indexOf("Dispneia") < 0) {
         quem.push("dor torácica e/ou dispneia");
@@ -1190,40 +1312,64 @@ button { font: inherit; color: inherit; }
     var linhasHPP = "";
     hpp.altoDireto.concat(hpp.medioDireto).forEach(function (f) {
       var selo = !f.tem
-        ? '<span class="piers__item" style="cursor:default">falta</span>'
+        ? '<span class="piers__item" style="cursor:default">' +
+          (f.nsabe ? "não sabe" : f.fora ? "fora da faixa" : "falta") + "</span>"
         : (f.sim
           ? '<span class="selo-alerta">presente</span>'
           : '<span class="piers__item ok" style="cursor:default">ausente</span>');
       linhasHPP += '<div class="linha-cond"><span class="linha-cond__rot">' + esc(f.n) + "</span>" + selo + "</div>";
     });
 
+    // Sem classificacao segura, a cor e a do "Sem cálculo" do fullPIERS.
     var CORTIER = { alto: "ruim", medio: "medio", baixo: "bom" };
     var ROTTIER = { alto: "Risco alto", medio: "Risco moderado", baixo: "Risco baixo" };
-    var corHpp = CORTIER[hpp.tier], valorHpp = ROTTIER[hpp.tier];
+    var corHpp = hpp.tier ? CORTIER[hpp.tier] : "ruim";
+    var valorHpp = hpp.tier ? ROTTIER[hpp.tier] : "Sem classificação";
 
     var topicosHpp = [];
     if (hpp.altoAtivo.length > 0) {
       topicosHpp.push("Fator de risco alto: <b>" + esc(hpp.altoAtivo.map(function (f) { return f.n; }).join("; ")) + "</b>");
     } else if (hpp.tier === "alto") {
+      // A gravidade da pre-eclampsia nao e avaliada: ela entra como "ao menos
+      // moderado", e o texto nao a chama so de moderada.
       topicosHpp.push("Risco alto por <b>2 ou mais</b> fatores de risco moderado: " +
-        esc(hpp.medioAtivo.map(function (f) { return f.n; }).join("; ")));
-    } else if (hpp.medioAtivo.length === 1) {
+        esc(hpp.medioAtivo.map(function (f) {
+          return f.n + (f.gravidadeAberta ? " (moderado se leve, alto se grave)" : "");
+        }).join("; ")));
+    } else if (hpp.medioAtivo.length === 1 && !hpp.hipertensivo) {
       topicosHpp.push("Fator de risco moderado: <b>" + esc(hpp.medioAtivo[0].n) + "</b>");
     }
-    if (hpp.faltando.length > 0) {
-      topicosHpp.push("<b>Dados insuficientes</b> — não avaliado: " +
-        esc(hpp.faltando.map(function (f) { return f.n; }).join(", ")) +
-        ". A classificação pode subir se algum desses vier positivo");
+    if (hpp.hipertensivo && hpp.tier !== "alto") {
+      topicosHpp.push("<b>Pré-eclâmpsia/hipertensão gestacional presente:</b> no quadro, a forma leve é " +
+        "fator moderado e a grave, alto. A tela não avalia a gravidade, então não classifica com ela sozinha");
     }
-    topicosHpp.push("Adaptado do <b>Quadro 5</b> (PAHO 2018): exclui achado de admissão/intraparto " +
+    var nomesFalta = esc(hpp.faltando.map(function (f) { return f.n; }).join(", "));
+    if (hpp.faltando.length > 0 && hpp.tier === "alto") {
+      topicosHpp.push("Ainda sem resposta (não avaliado, “não sabe” ou fora da faixa): " + nomesFalta +
+        " — não muda a classificação, que já é a mais alta");
+    } else if (hpp.faltando.length > 0) {
+      topicosHpp.push("<b>Dados insuficientes</b> — não avaliado, “não sabe” ou fora da faixa: " + nomesFalta +
+        ". Sem eles a tela não classifica: cada um, sozinho, pode mudar o risco");
+    }
+    if (hpp.orfaoGest) {
+      topicosHpp.push("<b>Há dados de gestação anterior com a resposta “Não”:</b> descarte-os ou " +
+        "corrija a resposta em Antecedentes. Até lá, a tela não trata como primigesta");
+    }
+    if (hpp.primigesta) {
+      topicosHpp.push("<b>Primigesta:</b> cesariana prévia, partos vaginais prévios e hemorragia em " +
+        "gestação anterior não se aplicam e saem da contagem");
+    }
+    topicosHpp.push("Adaptado do <b>Quadro 3</b> da OPAS 2018 (Quadro 5 do protocolo Einstein): exclui achado de admissão/intraparto " +
       "(sangramento ativo, corioamnionite) e o que a 1ª consulta não coleta (hematócrito, gravidade " +
       "de pré-eclâmpsia/hipertensão, cirurgia uterina que não seja cesariana)");
     topicosHpp.push("Não considera polidrâmnio nem macrossomia isolados — a fonte não publica corte " +
       "numérico para nenhum dos dois");
+    topicosHpp.push("Não considera descolamento prematuro de placenta nesta gestação, fator alto do " +
+      "quadro: a pergunta saiu da 1ª consulta a pedido dos médicos");
 
     h += '<div class="secao"><div class="secao__titulo">Hemorragia pós-parto (HPP)</div>' +
       '<p style="font-size:12px;margin:0 0 10px">Estratificação de risco anteparto, adaptada do ' +
-      "<b>Quadro 5</b> (PAHO 2018).</p>" +
+      "<b>Quadro 3</b> da OPAS 2018 (Quadro 5 do protocolo Einstein).</p>" +
       grupoLinhas(linhasHPP) +
       '<div class="cartao-calc cartao-calc--' + corHpp + '">' +
       '<div class="cartao-calc__topo">' +
@@ -1291,7 +1437,8 @@ button { font: inherit; color: inherit; }
     h += "</div>";
 
     // 370 e CARACTERISTICA desta gestacao, nao intercorrencia -- por isso fica
-    // junto de DUM/DPP/IG. Nao confundir com 253, gestacao gemelar na FAMILIA.
+    // junto de DUM/DPP/IG. Nao confundir com 253, gestacao gemelar na FAMILIA
+    // (fora da tela desde a D-42; a coluna continua).
     h += grupoLinhas(linha("Gestação múltipla", null, "gest_multipla", SIM_NAO));
 
     h += '<div class="secao"><div class="secao__titulo">Intercorrências nesta gestação</div>' +
@@ -1301,7 +1448,7 @@ button { font: inherit; color: inherit; }
       intercorrencias("atu_", "atu") +
       // Acretismo so existe no eixo atual: e suspeita por imagem NESTA gestacao,
       // nao um antecedente das anteriores -- por isso fica fora de CONDICOES
-      // (que so cobre as 15 condicoes simetricas nos dois eixos) e entra como
+      // (que cobre as condicoes dos dois eixos; DPP e RPM so no anterior, D-42) e entra como
       // linha solta, insumo da calculadora de HPP (D-39).
       grupoLinhas(linha("Suspeita de acretismo placentário", null, "atu_acret", SIM_NAO_SABE)) +
       '<div class="campos" style="margin-top:12px">' + campoArea("out4", "Outros", "369") + "</div></div>";
@@ -1317,62 +1464,20 @@ button { font: inherit; color: inherit; }
     var h = '<h2 class="painel__titulo">Antecedentes</h2>' +
       '<p class="painel__nota">O que ela já tinha antes desta gestação, e o que corre na família.</p>';
 
-    // Cada linha e o proprio "quais" (quando existe) viajam juntos num wrapper:
-    // e ELE que vira item da grade, nao mais a linha sozinha. Um grid item que
-    // cresce de altura quando abre o condicional -- em vez de acumular todos os
-    // condicionais soltos no fim, que era o que deixava "Quais alergias?" a
-    // onze linhas de distancia de "Alergias". CSS Grid absorve a altura
-    // desigual sem quebrar as 2 colunas (ver .linhas-cond).
-    h += '<div class="secao"><div class="secao__titulo">Dela</div>';
-    var linhasPes = "";
-    PESSOAIS.forEach(function (c) {
-      var rot = esc(c.nome) + (c.dica
-        ? '<small style="display:block;color:#93a2b1;font-size:10.5px">' + esc(c.dica) + "</small>" : "");
-      var item = linha(rot, c.cod, "pes_" + c.id, SIM_NAO);
-      if (c.det) {
-        item += condicional("pes_" + c.id, "sim", "det_" + c.id,
-          campoTexto("det_" + c.id, c.detRot || "Quais", c.det === true ? null : c.det, "g"), "Não");
-      }
-      linhasPes += '<div class="linha-cond-grupo">' + item + "</div>";
-    });
-    h += grupoLinhas(linhasPes);
-    h += "</div>";
-
-    // IST: concreto primeiro, 212 por ultimo como "outra IST" -- se a pergunta
-    // generica vier na frente, uma negativa por estigma faz o herpes nunca ser
-    // perguntado, e herpes muda conduta obstetrica.
-    h += '<div class="secao"><div class="secao__titulo">Infecções sexualmente transmissíveis</div>' +
-      grupoLinhas(
-        linha("Herpes genital", "214", "ist_herg", SIM_NAO) +
-        linha("Verruga genital", "216", "ist_verg", SIM_NAO) +
-        linha("Úlcera genital", "215", "ulcg", SIM_NAO) +
-        linha("Outra IST diagnosticada?", "212", "ist_mae", SIM_NAO)) +
-      condicional("ist_mae", "sim", "ist_outras",
-        campoTexto("ist_outras", "Qual IST?", "213", "g"), "Não");
-    if ((get("ist_herg") === "sim" || get("ist_verg") === "sim") && get("ist_mae") === "nao") {
-      h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
-        "<b>Herpes e verruga genital são IST, e “Outra IST” está em Não.</b> " +
-        "Confira 212 — o sistema não altera sozinho.</div></div>";
-    }
-    // 215 e SINAL, nao etiologia: fica como linha solta do bloco, sem porteiro
-    // de IST. Marcar "Ulcera: Sim" com "IST: Nao" e estado clinico legitimo e
-    // nao ha validacao bloqueando -- ver D-15.
-    h += "</div>";
-
-    h += campoArea("outr", "Outras observações sobre ela", "217");
-
-    // Gestacoes anteriores e antecedente: entra aqui como secao micro.
+    // Gestacoes anteriores e antecedente: entra aqui como secao micro, e e a
+    // PRIMEIRA do bloco desde a rodada 1 de feedback (D-42, 2026-10-14).
     var ng = parseInt(get("ng"), 10);
     /* A pergunta explicita substitui a deducao por 300 = 0. Deduzir confundia
        "nunca engravidou" com "nao perguntei" -- e o mesmo defeito que D-06
        proibe nos itens sim/nao. Todo o resto do bloco depende da resposta. */
-    h += '<div class="secao" style="margin-top:20px"><div class="secao__titulo">Gestações anteriores</div>' +
+    h += '<div class="secao"><div class="secao__titulo">Gestações anteriores</div>' +
       grupoLinhas(linha("Já teve gestação anterior?", null, "gest_ant", SIM_NAO));
 
     var teveGest = get("gest_ant") === "sim";
     // Chaves do bloco, para saber se ha dado preenchido escondido atras do "Nao".
-    var CHAVES_GEST = ["ng", "np", "na", "ncesa", "ano_ult_parto", "out3"];
-    CONDICOES.forEach(function (c) { CHAVES_GEST.push("ant_" + c.id); });
+    // ant_hpp entra aqui: sem ela, a HPP anterior respondida ficava escondida
+    // atras do "Nao", gravada e contando na calculadora, sem aviso de orfao.
+    var CHAVES_GEST = chavesGestAnt();
 
     if (teveGest) {
       var np = parseInt(get("np"), 10), na = parseInt(get("na"), 10);
@@ -1384,7 +1489,10 @@ button { font: inherit; color: inherit; }
         // as gestacoes anteriores, a atual fica fora — e o que da forma ao
         // aviso de partos + abortos logo abaixo.
         campoNum("ng", "Nº de gestações anteriores", "300", 0, 20) +
-        campoNum("np", "Nº de partos", "301", 0, 20) +
+        // "inclui as cesareas": e o que a HPP assume para contar partos
+        // vaginais (partos - cesareas). Sem a dica, quem anota no estilo G/P/C
+        // poria so os vaginais aqui, e o fator sairia do lado tranquilizador.
+        campoNum("np", "Nº de partos", "301", 0, 20, "inclui as cesáreas") +
         campoNum("na", "Nº de abortos", "302", 0, 20) +
         // Campo proprio desde 2026-09-03 (pendencia 17). Antes o numero de
         // cesareas so existia disperso em texto livre -- 205 e 317 --, e
@@ -1433,6 +1541,50 @@ button { font: inherit; color: inherit; }
       }
     }
     h += "</div>";
+
+    // Cada linha e o proprio "quais" (quando existe) viajam juntos num wrapper:
+    // e ELE que vira item da grade, nao mais a linha sozinha. Um grid item que
+    // cresce de altura quando abre o condicional -- em vez de acumular todos os
+    // condicionais soltos no fim, que era o que deixava "Quais alergias?" a
+    // onze linhas de distancia de "Alergias". CSS Grid absorve a altura
+    // desigual sem quebrar as 2 colunas (ver .linhas-cond).
+    h += '<div class="secao" style="margin-top:20px"><div class="secao__titulo">Dela</div>';
+    var linhasPes = "";
+    PESSOAIS.forEach(function (c) {
+      var rot = esc(c.nome) + (c.dica
+        ? '<small style="display:block;color:#93a2b1;font-size:10.5px">' + esc(c.dica) + "</small>" : "");
+      var item = linha(rot, c.cod, "pes_" + c.id, SIM_NAO);
+      if (c.det) {
+        item += condicional("pes_" + c.id, "sim", "det_" + c.id,
+          campoTexto("det_" + c.id, c.detRot || "Quais", c.det === true ? null : c.det, "g"), "Não");
+      }
+      linhasPes += '<div class="linha-cond-grupo">' + item + "</div>";
+    });
+    h += grupoLinhas(linhasPes);
+    h += "</div>";
+
+    // IST: concreto primeiro, 212 por ultimo como "outra IST" -- se a pergunta
+    // generica vier na frente, uma negativa por estigma faz o herpes nunca ser
+    // perguntado, e herpes muda conduta obstetrica.
+    h += '<div class="secao"><div class="secao__titulo">Infecções sexualmente transmissíveis</div>' +
+      grupoLinhas(
+        linha("Herpes genital", "214", "ist_herg", SIM_NAO) +
+        linha("Verruga genital", "216", "ist_verg", SIM_NAO) +
+        linha("Úlcera genital", "215", "ulcg", SIM_NAO) +
+        linha("Outra IST diagnosticada?", "212", "ist_mae", SIM_NAO)) +
+      condicional("ist_mae", "sim", "ist_outras",
+        campoTexto("ist_outras", "Qual IST?", "213", "g"), "Não");
+    if ((get("ist_herg") === "sim" || get("ist_verg") === "sim") && get("ist_mae") === "nao") {
+      h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
+        "<b>Herpes e verruga genital são IST, e “Outra IST” está em Não.</b> " +
+        "Confira 212 — o sistema não altera sozinho.</div></div>";
+    }
+    // 215 e SINAL, nao etiologia: fica como linha solta do bloco, sem porteiro
+    // de IST. Marcar "Ulcera: Sim" com "IST: Nao" e estado clinico legitimo e
+    // nao ha validacao bloqueando -- ver D-15.
+    h += "</div>";
+
+    h += campoArea("outr", "Outras observações sobre ela", "217");
 
     h += '<div class="secao" style="margin-top:20px"><div class="secao__titulo">Da família</div>';
     var linhasFam = "";
@@ -1539,7 +1691,8 @@ button { font: inherit; color: inherit; }
       var linhasGrp = "";
       grp.itens.forEach(function (i) {
         var item = linha(esc(i.nome) + (i.normal ? '<small style="display:block;color:#93a2b1;font-size:10.5px">normal: ' +
-          esc(i.normal) + "</small>" : ""), i.cod, "ex_" + i.id, NORMAL_ALT);
+          esc(i.normal) + "</small>" : ""), i.cod, "ex_" + i.id,
+          i.naoAvaliado ? NORMAL_ALT.concat([{ v: "nao_avaliado", r: "Não avaliado" }]) : NORMAL_ALT);
         if (i.det) {
           /* O grau entra DENTRO do mesmo condicional da localizacao: os dois
              sao abertos pelo mesmo "Alterado" e, se a resposta voltar para
@@ -1613,21 +1766,33 @@ button { font: inherit; color: inherit; }
       // tem a unidade ESCOLHIDA no preenchimento (creat_un), nunca assumida
       // (decisao da medica, 2026-08-07; fecha a pendencia 3). Plaquetas em
       // mil/mm3 == x10^9/L, mesmo numero; TGO so se reporta em U/L.
+      // A data do hemograma e a data de coleta da SECAO (D-43): vale para os
+      // exames abaixo que nao tiverem data propria. Cada exame mostra a sua --
+      // tracejada e cinza enquanto herda, cheia quando foi digitada.
+      campoData("dt_lab", "Data do hemograma (vale para os exames abaixo)", null, "m") +
       campoNum("hb", "Hemoglobina (g/dL)", "503", 3, 20) +
-      campoNum("plaq", "Plaquetas (mil/mm³)", "504", 5, 900) +
+      campoNum("plaq", "Plaquetas (mil/mm³)", "504", 0, 900) +
       campoNum("leuc", "Leucócitos (/mm³)", "505", 500, 60000) +
-      campoNum("glic", "Glicose (mg/dL)", "507", 20, 600) +
-      campoNum("creat", "Creatinina", "515", 0.1, 1400) +
+      comData(campoNum("glic", "Glicose (mg/dL)", "507", 20, 600), "dt_glic", "dt_lab") +
+      comData(campoNum("creat", "Creatinina", "515", 0.1, 1400), "dt_creat", "dt_lab") +
       campoTri("creat_un", "Unidade da creatinina", null,
         [{ v: "mgdl", r: "mg/dL" }, { v: "umoll", r: "µmol/L" }], "p") +
-      campoNum("tgo", "TGO / AST (U/L)", "516", 1, 2000) +
-      campoNum("totg1", "TOTG 1ª medida (mg/dL)", "508", 20, 400) +
+      comData(campoNum("tgo", "TGO / AST (U/L)", "516", 1, 2000), "dt_tgo", "dt_lab") +
+      comData(campoNum("totg1", "TOTG 1ª medida (mg/dL)", "508", 20, 400), "dt_totg", "dt_lab") +
       campoNum("totg2", "TOTG 2ª medida, 2 h (mg/dL)", "509", 20, 400) +
-      campoNum("tsh", "TSH (µUI/mL)", "513", 0, 100) +
-      campoNum("t4l", "T4 livre (ng/dL)", "514", 0, 10) +
+      comData(campoNum("tsh", "TSH (µUI/mL)", "513", 0, 100), "dt_tsh", "dt_lab") +
+      comData(campoNum("t4l", "T4 livre (ng/dL)", "514", 0, 10), "dt_t4l", "dt_lab") +
+      // Variaveis novas (D-43). Unidade fixa: ferritina em ng/mL e ug/L e o
+      // mesmo numero; B12 e vitamina D seguem a unidade corrente dos laudos.
+      comData(campoNum("ferr", "Ferritina (ng/mL)", null, 1, 5000), "dt_ferr", "dt_lab") +
+      comData(campoNum("b12", "Vitamina B12 (pg/mL)", null, 50, 5000), "dt_b12", "dt_lab") +
+      comData(campoNum("vitd", "Vitamina D — 25(OH)D (ng/mL)", null, 3, 200), "dt_vitd", "dt_lab") +
       "</div>";
+    h += '<div data-aviso="data-lab">' + avisoDataPosterior(false) + "</div>";
     // Sinalizar, nunca assumir: numero sem unidade nao entra no fullPIERS, e o
     // aviso diz isso aqui, ao lado de onde se corrige — nao so no cartao.
+    // Atualizado tambem durante a digitacao, sem redesenhar (atualizarCalculadoras).
+    h += '<div data-aviso="plaq">' + avisoPlaquetas() + "</div>";
     if (get("creat") && !get("creat_un")) {
       h += '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' +
         "<b>Creatinina sem unidade.</b> Escolha mg/dL ou µmol/L ao lado do valor — " +
@@ -1637,6 +1802,9 @@ button { font: inherit; color: inherit; }
     h += campoArea("obse", "Observações do hemograma", "506") + "</div>";
 
     h += '<div class="secao"><div class="secao__titulo">Sorologias</div>' +
+      // Data de coleta da secao (D-43): vale para as sorologias sem data
+      // propria. "Sem resultado" nunca ganha data -- nao houve coleta a datar.
+      '<div class="campos">' + campoData("dt_soro", "Data da coleta das sorologias (vale para as que não tiverem data própria)", null, "g") + "</div>" +
       '<table class="grade grade--larga"><tbody>';
     var grupoSoro = null;
     SOROLOGIAS.forEach(function (s) {
@@ -1657,7 +1825,7 @@ button { font: inherit; color: inherit; }
         h += '<button type="button" class="atalho' + (on && o !== s.ruim ? " feito" : "") +
           '" style="' + estilo + '" data-soro="' + s.id + '" data-v="' + esc(o) + '">' + esc(o) + "</button>";
       });
-      h += "</div>";
+      h += campoDataExame("dt_" + s.id, "dt_soro") + "</div>";
       // Titulacao do VDRL: SEMPRE visivel, e ENTRADA ESTRUTURADA. Como texto
       // livre chegava "1-23", "1 : 8", "1,8" -- e titulacao e razao, entao
       // separador errado muda o significado. VDRL se reporta em diluicoes
@@ -1685,7 +1853,10 @@ button { font: inherit; color: inherit; }
       }
       h += "</td></tr>";
     });
-    h += "</tbody></table></div>";
+    // Aviso DEPOIS da tabela: acima dela, aparecer no meio da digitacao de uma
+    // data empurrava a linha em edicao (revisao cega 2).
+    h += "</tbody></table>" +
+      '<div data-aviso="data-soro">' + avisoDataPosterior(true) + "</div></div>";
 
     h += '<div class="secao"><div class="secao__titulo">Urina</div>' +
       grupoLinhas(
@@ -2078,7 +2249,13 @@ button { font: inherit; color: inherit; }
       ["Não vacinada", "Vacinada", "Sem data", "Não informado"].forEach(function (o) {
         h += '<button type="button" class="atalho' + (st === o ? " feito" : "") + '" data-vac="' + v.id + '" data-v="' + esc(o) + '">' + esc(o) + "</button>";
       });
-      if (st === "Vacinada") {
+      if (st === "Vacinada" && v.doses) {
+        for (var dose = 1; dose <= v.doses; dose++) {
+          h += '<label style="font-size:11.5px;color:#5c6f82;margin-left:6px">' + dose + "ª dose " +
+            '<input type="date" style="padding:3px;border:1px solid #c7d0d9;border-radius:3px" data-vacdata="' +
+            v.id + "_" + dose + '" value="' + (get("vacd_" + v.id + "_" + dose) || "") + '"></label>';
+        }
+      } else if (st === "Vacinada") {
         h += '<input type="date" style="padding:3px;border:1px solid #c7d0d9;border-radius:3px" data-vacdata="' + v.id + '" value="' + (get("vacd_" + v.id) || "") + '">';
       }
       h += "</div></td></tr>";
@@ -2125,8 +2302,7 @@ button { font: inherit; color: inherit; }
       "</div></div>";
 
     h += '<div class="secao" style="margin-top:16px"><div class="secao__titulo">Exames</div>' +
-      grupoLinhas(linha("Solicito rotina de exames", "701", "solr", SIM_NAO)) +
-      condicional("solr", "sim", "solq", campoArea("solq", "Quais", "702"), "Não") + "</div>";
+      grupoLinhas(linha("Solicito rotina de exames", "701", "solr", SIM_NAO)) + examesSolicitados() + "</div>";
 
     var sem = parseInt(get("retorno"), 10);
     var dataRet = null;
@@ -2142,7 +2318,9 @@ button { font: inherit; color: inherit; }
     }
     h += "</div><small style=\"color:#93a2b1\">grava o intervalo prescrito e a data prevista</small></div>";
 
-    h += '<div class="campos">' + campoData("ageu", "Ultrassom agendado para", "703", "m") + "</div>";
+    // "Ultrassom agendado para" (703) saiu de Condutas a pedido dos medicos
+    // (D-42, 2026-10-14). A coluna fica; o exame de imagem pedido passa a ser
+    // escrito em "Exames" quando a migracao 015 trouxer o campo proprio.
 
     /* As tres caixas fixas de texto (650/651/652) sairam daqui: nao sobrevivem
        a uma gestacao de alto risco com dezenas de USG. Superadas por
@@ -2179,7 +2357,7 @@ button { font: inherit; color: inherit; }
      em Antecedentes (gestacao anterior) e em Gestacao atual (esta gestacao). */
   function intercorrencias(prefixo, campoCod) {
     var h = "", eixo = null;
-    CONDICOES.forEach(function (c) {
+    condicoesDoEixo(prefixo).forEach(function (c) {
       if (c.eixo !== eixo) {
         eixo = c.eixo;
         h += '<div class="sub-eixo">' + esc(eixo) + "</div>";
@@ -2225,6 +2403,99 @@ button { font: inherit; color: inherit; }
       '" data-k="' + k + '" value="' + esc(get(k) || "") + '">' +
       (dica ? '<span class="campo__dica">' + esc(dica) + "</span>" : "") + "</div>";
   }
+  /* ---- data de coleta por exame (D-43) -----------------------------------
+     Cada exame tem a sua data; em branco, herda a da secao (data do
+     hemograma, ou data da coleta das sorologias). A heranca e VIVA: o que se
+     grava e a data efetiva calculada na hora de gravar, nunca uma copia feita
+     quando a data da secao foi digitada -- copia ficaria velha se a data da
+     secao fosse corrigida depois, e ninguem perceberia. */
+  var DATAS_LAB = [
+    { col: "hemograma_data", nome: "hemograma", dt: null, tem: ["hb", "plaq", "leuc"] },
+    { col: "glicose_data", nome: "glicose", dt: "dt_glic", tem: ["glic"] },
+    { col: "creatinina_data", nome: "creatinina", dt: "dt_creat", tem: ["creat"] },
+    { col: "tgo_data", nome: "TGO", dt: "dt_tgo", tem: ["tgo"] },
+    { col: "totg_data", nome: "TOTG", dt: "dt_totg", tem: ["totg1", "totg2"] },
+    { col: "tsh_data", nome: "TSH", dt: "dt_tsh", tem: ["tsh"] },
+    { col: "t4_livre_data", nome: "T4 livre", dt: "dt_t4l", tem: ["t4l"] },
+    { col: "ferritina_data", nome: "ferritina", dt: "dt_ferr", tem: ["ferr"] },
+    { col: "vitamina_b12_data", nome: "vitamina B12", dt: "dt_b12", tem: ["b12"] },
+    { col: "vitamina_d_data", nome: "vitamina D", dt: "dt_vitd", tem: ["vitd"] }
+  ];
+  /* So entra exame com resultado -- data sem resultado seria coleta inventada
+     -- e sorologia "Sem resultado" nunca entra: nao houve coleta a datar.
+     `propria` diz se a data difere da secao, que e quando a exportacao a cita. */
+  function datasColeta() {
+    var r = [];
+    DATAS_LAB.forEach(function (d) {
+      if (!d.tem.some(function (k) { return get(k); })) { return; }
+      var p = d.dt ? get(d.dt) : null;
+      r.push({ col: d.col, nome: d.nome, data: p || get("dt_lab") || "",
+               propria: !!p && p !== get("dt_lab"), soro: false });
+    });
+    SOROLOGIAS.forEach(function (x) {
+      var v = get("soro_" + x.id);
+      if (!v || v === "Sem resultado") { return; }
+      var p = get("dt_" + x.id);
+      r.push({ col: x.col, nome: x.rot, data: p || get("dt_soro") || "",
+               propria: !!p && p !== get("dt_soro"), soro: true });
+    });
+    return r;
+  }
+  function campoDataExame(k, herda) {
+    var propria = get(k), efetiva = propria || get(herda) || "";
+    return '<input type="date" class="data-exame' + (propria ? "" : " herdada") + '" data-k="' + k +
+      '" data-herda="' + herda + '" value="' + esc(efetiva) + '" title="Data de coleta deste exame. ' +
+      'Em branco, vale a data da seção." aria-label="Data de coleta">';
+  }
+  // Poe a data do exame dentro do proprio campo, logo abaixo do valor.
+  function comData(htmlCampo, k, herda) {
+    var i = htmlCampo.lastIndexOf("</div>");
+    return htmlCampo.slice(0, i) + campoDataExame(k, herda) + htmlCampo.slice(i);
+  }
+  // Data de coleta depois da data da consulta: aviso, nunca bloqueio.
+  function datasPosteriores(soro) {
+    var ref = get("data_consulta") || hojeLocal();
+    var depois = datasColeta().filter(function (d) {
+      return (soro === undefined || d.soro === soro) && d.data && d.data > ref;
+    });
+    if (!depois.length) { return ""; }
+    return "<b>Data de coleta depois da data da consulta (" + fmtData(ref) + "):</b> " +
+      esc(depois.map(function (d) { return d.nome + " em " + fmtData(d.data); }).join(", ")) +
+      ". Confira — aviso apenas, não impede finalizar.";
+  }
+  function avisoDataPosterior(soro) {
+    var t = datasPosteriores(soro);
+    return t ? '<div class="aviso aviso--atencao" style="margin-top:10px"><span>⚠</span><div>' + t + "</div></div>" : "";
+  }
+  /* "Solicito rotina de exames" em Sim abre laboratoriais e de imagem, cada um
+     com o proprio texto (D-43). Marcacao de conduta, como as orientacoes:
+     marcada grava "sim", desmarcada fica em branco. O que foi escrito nunca
+     some calado (D-16): com a resposta virada, aparece como orfao. */
+  var CHAVES_EXAMES_SOLIC = ["solr_lab", "solq_lab", "solr_img", "solq_img"];
+  function examesSolicitados() {
+    var aberto = get("solr") === "sim";
+    var orfaos = CHAVES_EXAMES_SOLIC.filter(function (k) { return get(k); });
+    if (!aberto && !orfaos.length) { return ""; }
+    var SOLICITO = [{ v: "sim", r: "Solicito" }];
+    var corpo = grupoLinhas(
+      '<div class="linha-cond-grupo">' + linha("Exames laboratoriais", null, "solr_lab", SOLICITO) +
+        condicional("solr_lab", "sim", "solq_lab", campoArea("solq_lab", "Quais exames laboratoriais?", null), "não marcado") + "</div>" +
+      '<div class="linha-cond-grupo">' + linha("Exames de imagem", null, "solr_img", SOLICITO) +
+        condicional("solr_img", "sim", "solq_img", campoArea("solq_img", "Quais exames de imagem?", null), "não marcado") + "</div>");
+    if (aberto) { return '<div class="condicional ver" data-pai="solr">' + corpo + "</div>"; }
+    return '<div class="condicional ver orfao" data-pai="solr">' +
+      '<div class="aviso aviso--atencao" style="margin:0 0 8px"><span>⚠</span><div>' +
+      "<b>Há exames solicitados preenchidos, e “Solicito rotina de exames” não está em Sim.</b>" +
+      "Corrija a resposta ou descarte — o sistema não apaga sozinho." +
+      '<div style="margin-top:6px"><button type="button" class="atalho" data-descartar-exames="1">' +
+      "Descartar os exames solicitados</button></div></div></div>" + corpo + "</div>";
+  }
+  // Data de coleta de um insumo de calculadora, para o cartao (D-37).
+  function dataInsumo(chaveDt) {
+    var d = (chaveDt && get(chaveDt)) || get("dt_lab");
+    return d ? " · coleta " + fmtData(d) : " · data de coleta não informada";
+  }
+
   function campoData(k, r, c, t) {
     return '<div class="campo campo--' + (t || "m") + '"><label>' + esc(r) + " " + cod(c) + "</label>" +
       '<input type="date" data-k="' + k + '" value="' + esc(get(k) || "") + '"></div>';
@@ -2254,8 +2525,8 @@ button { font: inherit; color: inherit; }
     var pref = { ident: ["cida", "zonr", "tele", "estc", "esco"], gesta: ["dum"],
       obst: null, antec: null, habit: null, exame: null, labor: null, vacin: null, condu: null };
     var n = 0, chaves = Object.keys(dados);
-    if (bloco === "exame") { n = chaves.filter(function (k) { return /^(ex_|peso|estatura|psist|pdias|spo2|au|bcf|dorp|movf)/.test(k); }).length; return { n: n, t: 20 }; }
-    if (bloco === "labor") { n = chaves.filter(function (k) { return /^(soro_|hb|plaq|leuc|glic[^_]|creat|tgo|tsh|t4l|abo|rh|coombs|eas|uroc)/.test(k); }).length; return { n: n, t: 19 }; }
+    if (bloco === "exame") { n = chaves.filter(function (k) { return /^(ex_|peso|estatura|psist|pdias|spo2|au|bcf|dorp|movf)/.test(k); }).length; return { n: n, t: 19 }; }
+    if (bloco === "labor") { n = chaves.filter(function (k) { return /^(soro_|hb|plaq|leuc|glic[^_]|creat|tgo|tsh|t4l|ferr|b12|vitd|abo|rh|coombs|eas|uroc)/.test(k); }).length; return { n: n, t: 22 }; }
     if (bloco === "calc") { return { n: 0, t: 0 }; }
     /* Nao ha total previsivel: o numero de exames de imagem de uma gestacao e
        justamente o que nao se sabe de antemao (D-34). Um exame ja registrado
@@ -2264,7 +2535,7 @@ button { font: inherit; color: inherit; }
     if (bloco === "imagem") { return { n: exames.length, t: Math.max(1, exames.length) }; }
     if (bloco === "glice") { n = chaves.filter(function (k) { return /^gl_/.test(k); }).length; return { n: n, t: 9 }; }
     if (bloco === "vacin") { n = chaves.filter(function (k) { return /^vac_/.test(k); }).length; return { n: n, t: 6 }; }
-    if (bloco === "antec") { n = chaves.filter(function (k) { return /^(pes_|fam_|ist_|ulcg|ant_|ng|np|na)/.test(k); }).length; return { n: n, t: 36 }; }
+    if (bloco === "antec") { n = chaves.filter(function (k) { return /^(pes_|fam_|ist_|ulcg|ant_|ng|np|na)/.test(k); }).length; return { n: n, t: 32 }; }
     if (bloco === "habit") { n = chaves.filter(function (k) { return /^hab_/.test(k); }).length; return { n: n, t: 3 }; }
     if (bloco === "racio") { return { n: get("racio") ? 1 : 0, t: 1 }; }
     if (bloco === "condu") { n = chaves.filter(function (k) { return /^(cond_|solr|retorno)/.test(k); }).length; return { n: n, t: 6 }; }
@@ -2311,9 +2582,11 @@ button { font: inherit; color: inherit; }
   function desenhaPiers() {
     var alvo = document.getElementById("piers");
     var faltam = PIERS.filter(function (i) {
-      if (i.k === "ig") { return !(calcIG() || get("ig_informada")); }
+      // O rodape conta a IG como o cartao conta: so a que da para ler.
+      if (i.k === "ig") { return insumosPiers().igSem === null; }
       // creatinina sem unidade e insumo ausente tambem no rodape
       if (i.k === "creat") { return !get("creat") || !get("creat_un"); }
+      if (i.k === "plaq") { return isNaN(plaquetasMil().v); }
       return !get(i.k);
     }).length;
     if (faltam === PIERS.length || blocoAtivo === "calc") { alvo.innerHTML = ""; return; }
@@ -2329,8 +2602,8 @@ button { font: inherit; color: inherit; }
      O teto impede que um rotulo excepcional empurre os controles para fora;
      o piso evita coluna estreita demais em grupo de rotulos curtos. */
   var ROT_MIN = 130, ROT_MAX = 400;
-  function ajustarRotulos() {
-    var grupos = painel.querySelectorAll(".linhas-cond");
+  function ajustarRotulos(raiz) {
+    var grupos = (raiz || painel).querySelectorAll(".linhas-cond");
     for (var i = 0; i < grupos.length; i++) {
       var g = grupos[i];
       g.style.setProperty("--rot", "max-content");
@@ -2488,9 +2761,42 @@ button { font: inherit; color: inherit; }
       else if (!s && det) { s = rotulo + " (texto sem resposta marcada): " + det; }
       return s;
     }
+    /* TEXTO COMPACTO (D-42, pedido dos medicos em 2026-10-14). Num subtopico
+       de perguntas Sim/Nao/Nao sabe, o positivo sai com o proprio rotulo e as
+       negativas viram UMA lista no fim da linha: "Pre-eclampsia: Sim. Nega:
+       a, b. Nao sabe: c." Tres regras, e cada uma tem teste:
+       - "Nao" e "Nao sabe" nunca na mesma lista (D-06): nao saber nao e negar;
+       - item com texto escrito sai sozinho, como antes -- "Alergias: Nao
+         (Dipirona)" e a contradicao que a D-16 manda deixar a vista, e numa
+         lista o texto sumiria;
+       - pergunta em branco nao entra em lista nenhuma (D-26). */
+    var NEGA = { nao: "Nega", nsabe: "Não sabe" };
+    function minusculaInicial(s) {
+      // "Síndrome HELLP" -> "síndrome HELLP"; sigla no comeco fica como esta.
+      return s.length > 1 && s.charAt(1) === s.charAt(1).toLowerCase()
+        ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+    }
+    // itens: [{ nome, chave, det, mapa }]; negativos: valor -> nome da lista.
+    function listaCondicoes(rotulo, itens, negativos) {
+      var soltos = [], listas = {};
+      itens.forEach(function (i) {
+        var v = get(i.chave);
+        if (v && negativos[v] && !(i.det && get(i.det))) {
+          (listas[v] = listas[v] || []).push(minusculaInicial(i.nome));
+          return;
+        }
+        var s = itemDet(i.nome, i.chave, i.det, i.mapa || EXP_SIMNAO);
+        if (s) { soltos.push(s); }
+      });
+      var partes = soltos.length ? [soltos.join("; ")] : [];
+      Object.keys(negativos).forEach(function (v) {
+        if (listas[v]) { partes.push(negativos[v] + ": " + listas[v].join(", ")); }
+      });
+      return partes.length ? (rotulo ? rotulo + ": " : "") + partes.join(". ") + "." : "";
+    }
     function condicoesExp(prefixo) {
-      return CONDICOES.map(function (c) {
-        return item(c.nome, prefixo + c.id, EXP_SIMNAO);
+      return condicoesDoEixo(prefixo).map(function (c) {
+        return { nome: c.nome, chave: prefixo + c.id };
       });
     }
 
@@ -2507,30 +2813,32 @@ button { font: inherit; color: inherit; }
       gestAnt.push("Ano do último parto: " + get("ano_ult_parto") +
         (interv === null ? "" : " (intervalo de " + interv + " anos)"));
     }
+    // Mesma ordem da tela: gestacoes anteriores primeiro (D-42).
     bloco("Antecedentes", [
-      secao("Dela", PESSOAIS.map(function (c) {
-        return itemDet(c.nome, "pes_" + c.id, "det_" + c.id, EXP_SIMNAO);
-      })),
-      secao("IST", [
-        item("Herpes genital", "ist_herg", EXP_SIMNAO),
-        item("Verruga genital", "ist_verg", EXP_SIMNAO),
-        item("Úlcera genital", "ulcg", EXP_SIMNAO),
-        itemDet("Outra IST diagnosticada", "ist_mae", "ist_outras", EXP_SIMNAO)]),
-      item("Outras observações sobre ela", "outr"),
       secao("Gestações anteriores", gestAnt),
-      secao("Intercorrências em gestações anteriores", condicoesExp("ant_")),
+      // A HPP anterior era gravada e nunca saia no texto -- entra aqui.
+      listaCondicoes("Intercorrências em gestações anteriores", condicoesExp("ant_").concat([
+        { nome: "Hemorragia pós-parto", chave: "ant_hpp" }]), NEGA),
       item("Outras observações das gestações anteriores", "out3"),
-      secao("Da família", FAMILIARES.map(function (c) {
-        return item(c.nome, "fam_" + c.id, EXP_SIMNAO);
-      })),
+      listaCondicoes("Dela", PESSOAIS.map(function (c) {
+        return { nome: c.nome, chave: "pes_" + c.id, det: c.det ? "det_" + c.id : null };
+      }), NEGA),
+      listaCondicoes("IST", [
+        { nome: "Herpes genital", chave: "ist_herg" },
+        { nome: "Verruga genital", chave: "ist_verg" },
+        { nome: "Úlcera genital", chave: "ulcg" },
+        { nome: "Outra IST diagnosticada", chave: "ist_mae", det: "ist_outras" }], NEGA),
+      item("Outras observações sobre ela", "outr"),
+      listaCondicoes("Da família", FAMILIARES.map(function (c) {
+        return { nome: c.nome, chave: "fam_" + c.id };
+      }), NEGA),
       item("Outras observações familiares", "out2")]);
 
+    var HAB_EXP = { nunca: "Nunca", parou: "Parou", atual: "Uso atual" };
     bloco("Hábitos", [
-      secao(null, HABITOS.map(function (b) {
-        var s = item(b.nome, "hab_" + b.id, { nunca: "Nunca", parou: "Parou", atual: "Uso atual" });
-        if (b.id === "drog" && s && get("droq")) { s += " (" + get("droq") + ")"; }
-        return s;
-      })),
+      listaCondicoes(null, HABITOS.map(function (b) {
+        return { nome: b.nome, chave: "hab_" + b.id, det: b.id === "drog" ? "droq" : null, mapa: HAB_EXP };
+      }), { nunca: "Nunca" }),
       item("Outras observações sobre hábitos", "hab_obs")]);
 
     var gesta = [];
@@ -2545,7 +2853,9 @@ button { font: inherit; color: inherit; }
     gesta.push(item("Gestação múltipla", "gest_multipla", EXP_SIMNAO));
     bloco("Gestação atual", [
       secao(null, gesta),
-      secao("Intercorrências nesta gestação", condicoesExp("atu_")),
+      // A suspeita de acretismo era gravada e nunca saia no texto -- entra aqui.
+      listaCondicoes("Intercorrências nesta gestação", condicoesExp("atu_").concat([
+        { nome: "Suspeita de acretismo placentário", chave: "atu_acret" }]), NEGA),
       item("Outros", "out4"),
       item("Queixas atuais", "quea"),
       itemDet("Medicamentos em uso", "medu", "medq", EXP_SIMNAO)]);
@@ -2575,6 +2885,7 @@ button { font: inherit; color: inherit; }
         var v = get("ex_" + i.id);
         if (!v) { return ""; }
         if (v === "normal") { return i.nome + ": " + (i.normal ? "normal (" + i.normal + ")" : "normal"); }
+        if (v === "nao_avaliado") { return i.nome + ": " + (i.naoAvaliado || "não avaliado"); }
         var s = i.nome + ": ALTERADO";
         // Grau e localizacao do edema saem juntos, na ordem em que a tela os
         // pergunta: "ALTERADO, 2+/4 (pes e tornozelos)".
@@ -2597,30 +2908,42 @@ button { font: inherit; color: inherit; }
       creatExp = "Creatinina: " + virg(get("creat")) + (un === "mgdl" ? " mg/dL"
         : un === "umoll" ? " µmol/L" : " (unidade não informada)");
     }
+    // Data propria de um exame, so quando difere da data da secao (D-43).
+    function dataPropria(chaveDt, chaveSec) {
+      var d = get(chaveDt);
+      return d && d !== get(chaveSec) ? " (" + fmtData(d) + ")" : "";
+    }
+    var dtTotg = dataPropria("dt_totg", "dt_lab");
     bloco("Exames e sorologias", [
       secao("Tipagem sanguínea", [
         item("Grupo ABO", "abo", { a: "A", b: "B", ab: "AB", o: "O", nsabe: "Não sabe / não realizada" }),
         item("Fator Rh", "rh", { neg: "Negativo", pos: "Positivo", nsabe: "Não sabe / não realizado" }),
         item("Coombs indireto", "coombs", { nao: "Negativo", sim: "Positivo", nsabe: "Não sabe / sem resultado" })]),
-      secao("Hemograma e bioquímica", [
+      secao("Hemograma e bioquímica" + (get("dt_lab") ? " — coleta " + fmtData(get("dt_lab")) : ""), [
         get("hb") ? "Hemoglobina: " + virg(get("hb")) + " g/dL" : "",
-        get("plaq") ? "Plaquetas: " + virg(get("plaq")) + " mil/mm³" : "",
+        get("plaq") ? "Plaquetas: " + virg(get("plaq")) + " mil/mm³" +
+          (plaquetasMil().fora ? " (fora da faixa — confira a unidade; não entrou nas calculadoras)" : "") : "",
         get("leuc") ? "Leucócitos: " + virg(get("leuc")) + "/mm³" : "",
-        get("glic") ? "Glicose: " + virg(get("glic")) + " mg/dL" : "",
-        creatExp,
-        get("tgo") ? "TGO/AST: " + virg(get("tgo")) + " U/L" : "",
-        get("totg1") ? "TOTG 1ª medida: " + virg(get("totg1")) + " mg/dL" : "",
-        get("totg2") ? "TOTG 2ª medida (2 h): " + virg(get("totg2")) + " mg/dL" : "",
-        get("tsh") ? "TSH: " + virg(get("tsh")) + " µUI/mL" : "",
-        get("t4l") ? "T4 livre: " + virg(get("t4l")) + " ng/dL" : ""]),
+        get("glic") ? "Glicose: " + virg(get("glic")) + " mg/dL" + dataPropria("dt_glic", "dt_lab") : "",
+        creatExp ? creatExp + dataPropria("dt_creat", "dt_lab") : "",
+        get("tgo") ? "TGO/AST: " + virg(get("tgo")) + " U/L" + dataPropria("dt_tgo", "dt_lab") : "",
+        get("totg1") ? "TOTG 1ª medida: " + virg(get("totg1")) + " mg/dL" + dtTotg : "",
+        get("totg2") ? "TOTG 2ª medida (2 h): " + virg(get("totg2")) + " mg/dL" + (get("totg1") ? "" : dtTotg) : "",
+        get("tsh") ? "TSH: " + virg(get("tsh")) + " µUI/mL" + dataPropria("dt_tsh", "dt_lab") : "",
+        get("t4l") ? "T4 livre: " + virg(get("t4l")) + " ng/dL" + dataPropria("dt_t4l", "dt_lab") : "",
+        get("ferr") ? "Ferritina: " + virg(get("ferr")) + " ng/mL" + dataPropria("dt_ferr", "dt_lab") : "",
+        get("b12") ? "Vitamina B12: " + virg(get("b12")) + " pg/mL" + dataPropria("dt_b12", "dt_lab") : "",
+        get("vitd") ? "Vitamina D (25-OH): " + virg(get("vitd")) + " ng/mL" + dataPropria("dt_vitd", "dt_lab") : ""]),
       item("Observações do hemograma", "obse"),
       // Marcador bruto: o nome que sai no texto e o do agente + o do marcador,
       // para "IgG: Reagente" nao aparecer solto na evolucao sem dizer de que.
-      secao("Sorologias", SOROLOGIAS.map(function (s) {
+      secao("Sorologias" + (get("dt_soro") ? " — coleta " + fmtData(get("dt_soro")) : ""), SOROLOGIAS.map(function (s) {
         var v = get("soro_" + s.id);
         if (!v) { return ""; }
         var txt = (s.grupo ? s.grupo + " " : "") + s.nome + ": " + v;
         if (s.det && get("sorodet_" + s.id)) { txt += " (titulação " + get("sorodet_" + s.id) + ")"; }
+        // "Sem resultado" nunca ganha data: nao houve coleta a datar.
+        if (v !== "Sem resultado") { txt += dataPropria("dt_" + s.id, "dt_soro"); }
         return txt;
       })),
       secao("Urina", [
@@ -2657,7 +2980,14 @@ button { font: inherit; color: inherit; }
         var st = get("vac_" + v.id);
         if (!st) { return ""; }
         var s = v.nome + ": " + st;
-        if (st === "Vacinada" && get("vacd_" + v.id)) { s += " em " + fmtData(get("vacd_" + v.id)); }
+        if (st === "Vacinada" && v.doses) {
+          // So as doses com data; dose sem data nao aparece (D-43).
+          var ds = [];
+          for (var n = 1; n <= v.doses; n++) {
+            if (get("vacd_" + v.id + "_" + n)) { ds.push(n + "ª dose " + fmtData(get("vacd_" + v.id + "_" + n))); }
+          }
+          if (ds.length) { s += " (" + ds.join(", ") + ")"; }
+        } else if (st === "Vacinada" && get("vacd_" + v.id)) { s += " em " + fmtData(get("vacd_" + v.id)); }
         return s;
       })),
       item("Outras vacinas", "out5")]);
@@ -2665,6 +2995,7 @@ button { font: inherit; color: inherit; }
     // fullPIERS: so entra se ao menos um insumo foi tocado — e, calculado, leva
     // junto as marcas obrigatorias (SpO2 assumida, conversao da creatinina).
     var z = insumosPiers();
+    var calcLinhas = [];
     var algumInsumo = z.igSem !== null || get("dorp") || get("ex_eupne") ||
       get("spo2") || get("plaq") || get("creat") || get("tgo");
     if (algumInsumo) {
@@ -2679,24 +3010,82 @@ button { font: inherit; color: inherit; }
            nao sai da equacao literal do artigo, e quem ler depois precisa saber
            contra o que ele bate. Nota fixa, nao condicional — vale sempre que
            houver numero (D-27). */
+        // Data dos exames do escore (D-37): o numero colado no AGHU diz de quando.
+        var dP = get("dt_lab"), dC = get("dt_creat") || dP, dT = get("dt_tgo") || dP;
+        if (dP && dP === dC && dP === dT) { notas.push("exames de " + fmtData(dP)); }
+        else if (dP || dC || dT) {
+          var nd = function (d) { return d ? fmtData(d) : "data não informada"; };
+          notas.push("plaquetas de " + nd(dP) + ", creatinina de " + nd(dC) + ", TGO de " + nd(dT));
+        } else { notas.push("data de coleta dos exames não informada"); }
         notas.push("idade gestacional alinhada à calculadora oficial do PRE-EMPT/UBC, " +
           "uma semana a mais que a equação publicada no Lancet");
-        bloco("Calculadoras", [
-          "fullPIERS: " + pct + "% de probabilidade de desfecho materno adverso em 48 h (" +
+        calcLinhas.push("fullPIERS: " + pct + "% de probabilidade de desfecho materno adverso em 48 h (" +
           faixaPiers(z.prob).rot.toLowerCase() + ")" +
-          (notas.length ? " — " + notas.join("; ") : "")]);
+          (notas.length ? " — " + notas.join("; ") : ""));
       } else {
         var falta = [];
-        if (z.igSem === null) { falta.push("idade gestacional"); }
+        if (z.igSem === null) {
+          falta.push(z.igForaFaixa ? "idade gestacional (fora da faixa)"
+            : z.igIlegivel ? "idade gestacional (não reconhecida)" : "idade gestacional");
+        }
         if (z.dorDisp === null) { falta.push("dor torácica e/ou dispneia"); }
         if (z.crUmol === null) {
           falta.push(isNaN(z.crBruto) ? "creatinina" : "unidade da creatinina");
         }
-        if (isNaN(z.plt)) { falta.push("plaquetas"); }
+        if (isNaN(z.plt)) { falta.push(z.pltFora ? "plaquetas (fora da faixa)" : "plaquetas"); }
         if (isNaN(z.ast)) { falta.push("TGO"); }
-        bloco("Calculadoras", ["fullPIERS: sem cálculo — falta " + falta.join(", ") + "."]);
+        calcLinhas.push("fullPIERS: sem cálculo — falta " + falta.join(", ") + ".");
       }
     }
+    /* HPP (D-39): vai para o texto desde 2026-10-14, a pedido. So entra se ao
+       menos um insumo foi tocado, como o fullPIERS; sem classificacao segura,
+       diz o que falta em vez de um risco. Na primigesta, os fatores de
+       gestacao anterior nao aparecem: nao se aplicam. */
+    var CHAVES_HPP = ["gest_ant", "atu_pprev", "atu_acret", "pes_coagul", "pes_anticoag", "plaq",
+      "np", "ncesa", "gest_multipla", "ant_hpp", "peso", "estatura",
+      "atu_hgest", "atu_pree", "atu_ecla", "atu_hellp"];
+    if (CHAVES_HPP.some(function (k) { return get(k); })) {
+      var hx = insumosHPP();
+      var nomesHpp = function (l) {
+        return l.map(function (f) {
+          return minusculaInicial(f.n) + (f.nsabe ? " (não sabe)" : f.fora ? " (fora da faixa)" : "");
+        }).join(", ");
+      };
+      // A mesma lista de exclusoes do cartao: o texto nao promete mais do que avalia.
+      var fonteHpp = " (estratificação da OPAS 2018 adaptada ao pré-natal: não avalia achados de " +
+        "admissão ou intraparto, gravidade da pré-eclâmpsia, hematócrito, cirurgia uterina que não seja " +
+        "cesárea, polidrâmnio e macrossomia isolados, nem DPP nesta gestação)";
+      var lh;
+      if (hx.tier === "alto") {
+        var porque = [];
+        var mediosFechados = hx.medioAtivo.filter(function (f) { return !f.gravidadeAberta; });
+        if (hx.altoAtivo.length) { porque.push("fator alto: " + nomesHpp(hx.altoAtivo)); }
+        if (mediosFechados.length) { porque.push("fator moderado: " + nomesHpp(mediosFechados)); }
+        if (hx.hipertensivo) {
+          porque.push("pré-eclâmpsia, eclâmpsia, HELLP ou hipertensão gestacional presente " +
+            "(moderado se leve, alto se grave)");
+        }
+        lh = "HPP: risco alto" + fonteHpp + " — " + porque.join("; ") +
+          (hx.faltando.length ? "; ainda sem resposta, sem mudar a classificação: " +
+            nomesHpp(hx.faltando) : "");
+      } else if (hx.tier === null) {
+        var partes = [];
+        if (hx.faltando.length) { partes.push("falta " + nomesHpp(hx.faltando)); }
+        if (hx.hipertensivo) {
+          partes.push("pré-eclâmpsia, eclâmpsia, HELLP ou hipertensão gestacional presente: moderado " +
+            "se leve, alto se grave, e a gravidade não é avaliada");
+        }
+        var outrosMedios = hx.medioAtivo.filter(function (f) { return !f.gravidadeAberta; });
+        if (outrosMedios.length) { partes.push("fator moderado presente: " + nomesHpp(outrosMedios)); }
+        lh = "HPP: sem classificação" + fonteHpp + " — " + partes.join("; ");
+      } else if (hx.tier === "medio") {
+        lh = "HPP: risco moderado" + fonteHpp + " — fator moderado: " + nomesHpp(hx.medioAtivo);
+      } else {
+        lh = "HPP: risco baixo" + fonteHpp + " — nenhum dos fatores avaliados";
+      }
+      calcLinhas.push(lh);
+    }
+    bloco("Calculadoras", calcLinhas);
 
     /* EXAMES DE IMAGEM (D-34): um paragrafo por exame, em ordem de data — a
        mesma ordem da tela. Sai inteiro no texto mesmo quando a coluna existe,
@@ -2751,14 +3140,28 @@ button { font: inherit; color: inherit; }
         return get("cond_" + o.id) === "sim" ? o.n : "";
       })),
       item("Orientações, conduta e plano", "plan"),
-      itemDet("Solicito rotina de exames", "solr", "solq", EXP_SIMNAO),
+      (function () {
+        // Laboratoriais e de imagem, cada um com o proprio texto (D-43).
+        var partes = [];
+        [["solr_lab", "solq_lab", "laboratoriais"], ["solr_img", "solq_img", "de imagem"]].forEach(function (x) {
+          var marcado = get(x[0]) === "sim", txt = get(x[1]);
+          if (marcado) { partes.push(x[2] + (txt ? " — " + txt : "")); }
+          else if (txt) { partes.push(x[2] + " (texto sem marcação): " + txt); }
+        });
+        if (!partes.length) { return item("Solicito rotina de exames", "solr", EXP_SIMNAO); }
+        // Contradicao a vista (D-16): a resposta e o texto saem juntos.
+        if (get("solr") !== "sim") {
+          return "Solicito rotina de exames: " + (get("solr") ? EXP_SIMNAO[get("solr")] : "sem resposta") +
+            ", mas há exames solicitados preenchidos: " + partes.join("; ");
+        }
+        return "Exames solicitados: " + partes.join("; ");
+      })(),
       (function () {
         var sem = parseInt(get("retorno"), 10);
         if (!sem) { return ""; }
         var d = new Date(); d.setDate(d.getDate() + sem * 7);
         return "Retorno em " + sem + " semana(s) (≈ " + fmtData(d.toISOString().slice(0, 10)) + ")";
       })(),
-      get("ageu") ? "Ultrassom agendado para " + fmtData(get("ageu")) : "",
       item("Outras observações", "outo")]);
 
     var agora = new Date();
@@ -2858,7 +3261,7 @@ button { font: inherit; color: inherit; }
      a coluna e o tipo no banco. GERADO a partir de docs/campos.yaml — nao
      edite a mao. scripts/gerar_contrato.py confere e FALHA se divergir. */
   var CONTRATO_CAMPOS = {
-    "abo": [["grupo_abo","grupo_abo"]], "ageu": [["cond_usg_agendado","date"]],
+    "abo": [["grupo_abo","grupo_abo"]],
     "ano_ult_parto": [["ano_ultimo_parto","integer"]],
     "ant_hgest": [["hist_hipertensao_gestacional","estado_clinico"]],
     "atu_hgest": [["atual_hipertensao_gestacional","estado_clinico"]],
@@ -2883,14 +3286,12 @@ button { font: inherit; color: inherit; }
     "ant_tpp": [["hist_trabalho_parto_pretermo","estado_clinico"]],
     "atu_anem": [["atual_anemia","estado_clinico"]],
     "atu_dmg": [["atual_diabetes_gestacional","estado_clinico"]],
-    "atu_dplac": [["atual_descolamento_placenta","estado_clinico"]],
     "atu_ecla": [["atual_eclampsia","estado_clinico"]],
     "atu_hellp": [["atual_hellp","estado_clinico"]],
     "atu_isoi": [["atual_isoimunizacao","estado_clinico"]],
     "atu_itu": [["atual_itu","estado_clinico"]],
     "atu_pprev": [["atual_placenta_previa","estado_clinico"]],
     "atu_pree": [["atual_preeclampsia","estado_clinico"]],
-    "atu_rpm": [["atual_rotura_prematura_membranas","estado_clinico"]],
     "atu_saf": [["atual_saf","estado_clinico"]],
     "atu_sifi": [["atual_sifilis","estado_clinico"]],
     "atu_tff": [["atual_transfusao_feto_fetal","estado_clinico"]],
@@ -2920,20 +3321,14 @@ button { font: inherit; color: inherit; }
     "ex_pantu": [["panturrilhas","achado_exame"]],
     "ex_ritm": [["ex_ritmo_cardiaco","achado_exame"]],
     "ex_ruid": [["ex_ruidos_adventicios","achado_exame"]],
-    "ex_sopr": [["ex_sopros","achado_exame"]], "ex_tire": [["ex_tireoide","achado_exame"]],
+    "ex_sopr": [["ex_sopros","achado_exame"]],
     "ex_vigil": [["ex_vigil","achado_exame"]],
     "exdet_edema": [["edema_observacao","text"]],
     "exdet_espe": [["ex_especular_alteracoes","text"]],
     "exdet_mams": [["ex_mamas_alteracoes","text"]],
     "exdet_pantu": [["panturrilhas_observacao","text"]],
-    "exdet_tire": [["ex_tireoide_alteracoes","text"]],
-    "exobs": [["ex_observacoes","text"]], "fam_diab": [["fam_diabetes","estado_clinico"]],
-    "fam_ecla": [["fam_eclampsia","estado_clinico"]],
-    "fam_gemel": [["fam_gestacao_gemelar","estado_clinico"]],
-    "fam_hipe": [["fam_hipertensao_cronica","estado_clinico"]],
+    "exobs": [["ex_observacoes","text"]],
     "fam_malf": [["fam_malformacoes","estado_clinico"]],
-    "fam_pree": [["fam_preeclampsia","estado_clinico"]],
-    "fam_tube": [["fam_tuberculose","estado_clinico"]],
     "gest_ant": [["teve_gestacao_anterior","estado_clinico"]],
     "gest_multipla": [["gestacao_multipla","estado_clinico"]],
     "gl_jeju_a": [["glic_jejum_alteradas","integer"]],
@@ -2974,7 +3369,7 @@ button { font: inherit; color: inherit; }
     "plan": [["cond_planos","text"]], "plaq": [["plaquetas","numeric"]],
     "prontuario": [["prontuario","text"]], "psist": [["pa_sistolica","integer"]],
     "quea": [["queixas_atuais","text"]], "racio": [["raciocinio_clinico","text"]], "retorno": [["cond_retorno_semanas","integer"]],
-    "rh": [["fator_rh","fator_rh"]], "solq": [["cond_exames_quais","text"]],
+    "rh": [["fator_rh","fator_rh"]],
     "solr": [["cond_solicita_exames","estado_clinico"]],
     "soro_antihbs": [["soro_anti_hbs","sorologia"]],
     "soro_cmvigg": [["soro_cmv_igg","sorologia"]],
@@ -2997,10 +3392,20 @@ button { font: inherit; color: inherit; }
     "vac_infl": [["vac_influenza","status_vacina"]],
     "vac_vhepb": [["vac_hepatite_b","status_vacina"]],
     "vac_vsr": [["vac_vsr","status_vacina"]],
-    "vacd_covi": [["vac_covid_data","date"]], "vacd_dt": [["vac_dt_data","date"]],
-    "vacd_dtpa": [["vac_dtpa_data","date"]], "vacd_infl": [["vac_influenza_data","date"]],
-    "vacd_vhepb": [["vac_hepatite_b_data","date"]], "vacd_vsr": [["vac_vsr_data","date"]],
-    "zonr": [["zona_residencia","zona_residencia"]]
+    "vacd_covi": [["vac_covid_data","date"]],
+    "vacd_dtpa": [["vac_dtpa_data","date"]], "vacd_infl": [["vac_influenza_data","date"]], "vacd_vsr": [["vac_vsr_data","date"]],
+    "zonr": [["zona_residencia","zona_residencia"]],
+    "fam_peec": [["fam_preeclampsia_eclampsia","estado_clinico"]],
+    "ferr": [["ferritina","numeric"]], "b12": [["vitamina_b12","numeric"]],
+    "vitd": [["vitamina_d","numeric"]],
+    "solr_lab": [["cond_exames_laboratoriais","estado_clinico"]],
+    "solq_lab": [["cond_exames_laboratoriais_quais","text"]],
+    "solr_img": [["cond_exames_imagem","estado_clinico"]],
+    "solq_img": [["cond_exames_imagem_quais","text"]],
+    "vacd_dt_1": [["vac_dt_dose1_data","date"]], "vacd_dt_2": [["vac_dt_dose2_data","date"]],
+    "vacd_vhepb_1": [["vac_hepatite_b_dose1_data","date"]],
+    "vacd_vhepb_2": [["vac_hepatite_b_dose2_data","date"]],
+    "vacd_vhepb_3": [["vac_hepatite_b_dose3_data","date"]]
   };
 
   /* Contrato da tabela FILHA (D-34): uma linha por exame de imagem. Mesma
@@ -3035,7 +3440,7 @@ button { font: inherit; color: inherit; }
   };
 
   var CONTRATO_DOMINIOS = {
-    "achado_exame": ["normal","alterado"],
+    "achado_exame": ["normal","alterado","nao_avaliado"],
     "apresentacao_fetal": ["cefalica","pelvica","cormica","nao_avaliavel"],
     "coombs": ["negativo","positivo","sem_resultado"],
     "grau_edema": ["ausente","mais_1","mais_2","mais_3","mais_4"],
@@ -3067,6 +3472,9 @@ button { font: inherit; color: inherit; }
 
   // Estado de interface que nao e dado clinico e por isso nao tem coluna.
   var NAO_E_DADO = ["forcar_obst", "ig_informada"];
+  /* dt_* sao as datas de coleta digitadas (D-43): nao sao coluna, sao insumo
+     de datasColeta(), que calcula a data efetiva de cada exame na gravacao. */
+  function naoEDado(k) { return NAO_E_DADO.indexOf(k) >= 0 || /^dt_/.test(k); }
 
   /* Chave do PERCURSO (D-35, docs/percurso-paciente.md, secao 2): identifica
      a GESTACAO, nao o atendimento. Nasce aqui, no primeiro atendimento, e e
@@ -3174,11 +3582,38 @@ button { font: inherit; color: inherit; }
      o campo fica de fora da gravacao, o popup diz qual, e o texto segue na
      exportacao. Esvaziar esta lista e o passo seguinte a conferencia. */
   var AGUARDA_MIGRACAO = { raciocinio_clinico: "014" };
+  /* Migracao 015 (D-43): as 33 colunas da 1a rodada de feedback. Mesma regra
+     da 014 -- tirar daqui so depois de conferir_supabase.py e conferir_banco.py
+     acharem as colunas, e inverter os casos de scripts/conferir_rodada1_campos.mjs. */
+  ["fam_preeclampsia_eclampsia", "ferritina", "vitamina_b12", "vitamina_d",
+   "hemograma_data", "glicose_data", "creatinina_data", "tgo_data", "totg_data", "tsh_data",
+   "t4_livre_data", "ferritina_data", "vitamina_b12_data", "vitamina_d_data",
+   "soro_vdrl_data", "soro_hiv_data", "soro_hbsag_data", "soro_anti_hbs_data", "soro_anti_hcv_data",
+   "soro_toxo_igg_data", "soro_toxo_igm_data", "soro_cmv_igg_data", "soro_cmv_igm_data", "soro_htlv_data",
+   "vac_dt_dose1_data", "vac_dt_dose2_data",
+   "vac_hepatite_b_dose1_data", "vac_hepatite_b_dose2_data", "vac_hepatite_b_dose3_data",
+   "cond_exames_laboratoriais", "cond_exames_laboratoriais_quais",
+   "cond_exames_imagem", "cond_exames_imagem_quais"].forEach(function (c) { AGUARDA_MIGRACAO[c] = "015"; });
+  /* VALOR que o contrato ja tem e o banco ainda nao (ENUM sem o valor): a
+     trava por coluna nao pega, e o Postgres recusaria a linha INTEIRA com
+     22P02 -- a classe do acidente das sorologias (D-40). O campo fica de fora
+     e o popup diz qual valor faltou. */
+  var AGUARDA_VALOR = { "achado_exame:nao_avaliado": "015" };
+  // Nomes do popup: quem atende le "ferritina", nao a chave interna.
+  var NOMES_LEGIVEIS = {
+    racio: "raciocínio clínico", fam_peec: "pré-eclâmpsia/eclâmpsia na família",
+    ferr: "ferritina", b12: "vitamina B12", vitd: "vitamina D", ex_mams: "mamas",
+    solr_lab: "exames laboratoriais solicitados", solq_lab: "quais exames laboratoriais",
+    solr_img: "exames de imagem solicitados", solq_img: "quais exames de imagem",
+    vacd_dt_1: "dT 1ª dose", vacd_dt_2: "dT 2ª dose",
+    vacd_vhepb_1: "hepatite B 1ª dose", vacd_vhepb_2: "hepatite B 2ª dose", vacd_vhepb_3: "hepatite B 3ª dose"
+  };
+  function nomeLegivel(k) { return NOMES_LEGIVEIS[k] || k; }
 
   function montarRegistro(protocolo) {
-    var linha = {}, problemas = [], semColuna = [];
+    var linha = {}, problemas = [], semColuna = [], semValor = [];
     Object.keys(dados).forEach(function (k) {
-      if (NAO_E_DADO.indexOf(k) >= 0) { return; }
+      if (naoEDado(k)) { return; }
       var c = CONTRATO_CAMPOS[k];
       var v = dados[k];
       if (v === "" || v === null || v === undefined) { return; }
@@ -3186,6 +3621,10 @@ button { font: inherit; color: inherit; }
       if (AGUARDA_MIGRACAO[c[0][0]]) { semColuna.push(k); return; }
       var r = converterValor(c[0][1], v);
       if (r.erro) { problemas.push(k + ": " + r.erro); return; }
+      if (AGUARDA_VALOR[c[0][1] + ":" + r.v]) {
+        semValor.push(nomeLegivel(k) + " (\u201c" + String(r.v).replace(/_/g, " ").replace("nao", "não") + "\u201d)");
+        return;
+      }
       /* Uma chave pode alimentar MAIS DE UMA coluna. Os pares de sorologia
          (HBsAg/anti-HBs, toxo IgG/IgM, CMV IgG/IgM) sao uma pergunta so na
          tela e dois codigos na planilha \u2014 553 e 554, 556 e 557, 558 e 559 \u2014,
@@ -3219,7 +3658,13 @@ button { font: inherit; color: inherit; }
     }
     // So declara imputacao quando o escore de fato rodou com o valor assumido.
     if (z.pode) { linha.spo2_imputada = !!z.spo2Imputada; }
-    return { linha: linha, problemas: problemas, semColuna: semColuna };
+    // Datas de coleta efetivas (D-43): so exame com resultado, e so com data.
+    datasColeta().forEach(function (d) {
+      if (!d.data) { return; }
+      if (AGUARDA_MIGRACAO[d.col]) { semColuna.push("data de coleta: " + d.nome); return; }
+      linha[d.col] = d.data;
+    });
+    return { linha: linha, problemas: problemas, semColuna: semColuna, semValor: semValor };
   }
 
   /* Linhas de pnar_exame_imagem (D-34). Mesma disciplina de montarRegistro():
@@ -3415,10 +3860,13 @@ button { font: inherit; color: inherit; }
        precisa saber antes de fechar. */
     if (e.semColuna && e.semColuna.length) {
       topicos.push("<b>Não foi gravado</b> (a coluna ainda não existe no banco): " +
-        esc(e.semColuna.map(function (k) {
-          return k === "racio" ? "raciocínio clínico" : k;
-        }).join(", ")) + ". Está no texto da exportação.");
+        esc(e.semColuna.map(nomeLegivel).join(", ")) + ". Está no texto da exportação.");
     }
+    if (e.semValor && e.semValor.length) {
+      topicos.push("<b>Não foi gravado</b> (o valor ainda não existe no banco): " +
+        esc(e.semValor.join(", ")) + ". Está no texto da exportação.");
+    }
+    if (e.datasPosteriores) { topicos.push(e.datasPosteriores); }
     if (e.problemas && e.problemas.length) {
       topicos.push("<b>Não foi gravado</b> (o contrato não tem valor para a resposta): " +
         esc(e.problemas.join(" · ")) + ". Está no texto da exportação.");
@@ -3450,7 +3898,9 @@ button { font: inherit; color: inherit; }
       campos: Object.keys(m.linha).length,
       exames: mx.linhas.length,
       temProntuario: !!get("prontuario"),
-      semColuna: m.semColuna, problemas: m.problemas.concat(mx.problemas)
+      semColuna: m.semColuna, semValor: m.semValor, problemas: m.problemas.concat(mx.problemas),
+      // O aviso da secao some de vista ao rolar; quem finaliza o ve de novo aqui.
+      datasPosteriores: datasPosteriores()
     };
     /* Campo que a tela nao soube converter NAO cancela a gravacao. Cancelar
        perderia o atendimento inteiro por causa de um "Não sabe" num tipo
@@ -3549,9 +3999,12 @@ button { font: inherit; color: inherit; }
 
     // atalho por grupo do exame físico
     if (t.dataset.descartar) { set(t.dataset.descartar, null); render(); return; }
+    if (t.dataset.descartarExames) {
+      CHAVES_EXAMES_SOLIC.forEach(function (k) { set(k, null); });
+      render(); return;
+    }
     if (t.dataset.descartarGest) {
-      ["ng", "np", "na", "ncesa", "ano_ult_parto", "out3"].forEach(function (k) { set(k, null); });
-      CONDICOES.forEach(function (c) { set("ant_" + c.id, null); });
+      chavesGestAnt().forEach(function (k) { set(k, null); });
       render(); return;
     }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
@@ -3612,8 +4065,9 @@ button { font: inherit; color: inherit; }
      data completa, entao o foco nunca e roubado no meio da digitacao. */
   /* Atualiza so o que DERIVA da DUM, sem trocar o HTML do painel. Existe para
      que o campo de data possa dar retorno imediato sem ser recriado embaixo do
-     dedo de quem digita. */
-  function atualizarDerivados() {
+     dedo de quem digita. `emEdicao` e o campo de data que disparou o evento:
+     nunca e reescrito daqui (ver o "change" abaixo). */
+  function atualizarDerivados(emEdicao) {
     var ig = calcIG(), dpp = calcDPP(), igInf = get("ig_informada");
     var topo = document.getElementById("topo-ig");
     if (topo) { topo.textContent = igInf || (ig ? ig.sem + "s " + ig.dias + "d" : "—"); }
@@ -3628,6 +4082,54 @@ button { font: inherit; color: inherit; }
     if (alvoIdade) { alvoIdade.value = idNasc === null ? "" : idNasc + " anos"; }
     var topoIdade = document.getElementById("topo-idade");
     if (topoIdade) { topoIdade.textContent = idNasc === null ? "—" : idNasc + " anos"; }
+    /* Data de coleta herdada (D-43): o exame sem data propria mostra a da
+       secao, e acompanha quando ela muda -- sem redesenhar, pela mesma razao
+       do DPP: o campo de data perderia o cursor. */
+    var herdadas = painel.querySelectorAll("input[data-herda]");
+    for (var i = 0; i < herdadas.length; i++) {
+      var el = herdadas[i], propria = get(el.dataset.k);
+      if (!propria && el !== emEdicao && el !== document.activeElement) { el.value = get(el.dataset.herda) || ""; }
+      el.classList.toggle("herdada", !propria);
+    }
+    // O aviso de data posterior a consulta acompanha a data, sem redesenho.
+    var avLab = painel.querySelector('[data-aviso="data-lab"]');
+    if (avLab) { avLab.innerHTML = avisoDataPosterior(false); }
+    var avSoro = painel.querySelector('[data-aviso="data-soro"]');
+    if (avSoro) { avSoro.innerHTML = avisoDataPosterior(true); }
+  }
+
+  /* Atualiza SO as calculadoras (o bloco, o rodape e o topo), sem trocar o
+     resto do painel. Existe para os insumos digitados -- plaquetas, TGO, IG
+     informada: redesenhar a tela inteira a cada tecla rolava o painel ~350 px
+     e, no campo de IG, tirava o cursor. O bloco de Calculadoras nunca tem
+     campo de digitar, entao troca-lo nao rouba foco de ninguem. */
+  function atualizarCalculadoras() {
+    var sec = document.getElementById("sec-calc");
+    if (sec) { sec.innerHTML = telas.calc(); ajustarRotulos(sec); }
+    var av = painel.querySelector('[data-aviso="plaq"]');
+    if (av) { av.innerHTML = avisoPlaquetas(); }
+    desenhaPiers();
+    var ig = calcIG(), topo = document.getElementById("topo-ig");
+    if (topo) { topo.textContent = get("ig_informada") || (ig ? ig.sem + "s " + ig.dias + "d" : "—"); }
+  }
+
+  /* Data de coleta herdada (D-43): o campo mostra a data da secao como VALOR,
+     e o navegador a devolve no change/blur so de a pessoa passar por ele --
+     Tab, ou um clique. Passar pelo campo nao muda nada, nos dois sentidos:
+     - campo que herda continua herdando enquanto o valor for o herdado (se
+       gravasse, a heranca viraria copia velha -- revisao cega 1);
+     - data propria continua propria mesmo que coincida com a da secao (se
+       voltasse a herdar, a data digitada se perderia quando a secao mudasse
+       -- revisao cega 2).
+     Voltar a herdar e apagar a data propria -- e o apagar so vale na SAIDA do
+     campo: corrigir o mes pelo teclado passa por um instante em que o campo
+     fica vazio, e esse vazio apagava a data propria (revisao cega 3). */
+  function setData(el, saindo) {
+    var k = el.dataset.k, herda = el.dataset.herda;
+    if (!herda) { set(k, el.value); return; }
+    if (el.value === "") { if (saindo) { set(k, null); } return; }
+    if (el.value === (get(herda) || "") && !get(k)) { return; }
+    set(k, el.value);
   }
 
   /* CAMPO DE DATA: nunca redesenhar enquanto ele tem o foco.
@@ -3640,8 +4142,12 @@ button { font: inherit; color: inherit; }
   document.addEventListener("change", function (ev) {
     var el = ev.target;
     if (el.dataset && el.dataset.k && el.type === "date") {
-      set(el.dataset.k, el.value);
-      atualizarDerivados();
+      setData(el, false);
+      /* O campo que disparou nao e reescrito. Quando a digitacao passa por
+         uma data que nao existe (31/09), o Chromium dispara "change" com o
+         activeElement fora do campo; reescreve-lo ali tirava o foco no meio
+         da digitacao, e o exame ficava com a data da secao (revisao cega 4). */
+      atualizarDerivados(el);
       return;
     }
     /* Exames de imagem: rede de seguranca para o navegador que nao dispara
@@ -3660,7 +4166,11 @@ button { font: inherit; color: inherit; }
   document.addEventListener("blur", function (ev) {
     var el = ev.target;
     if (el.dataset && el.dataset.k && el.type === "date") {
-      set(el.dataset.k, el.value);
+      /* Trocar de janela (Alt+Tab para o AGHU) dispara "blur" com o campo
+         ainda em foco: nao e saida, e o vazio daquele instante nao apaga a
+         data propria (revisao cega 4). Na saida de verdade o activeElement
+         ja e outro. */
+      setData(el, document.activeElement !== el);
       atualizarDerivados();
     }
   }, true);
@@ -3674,6 +4184,10 @@ button { font: inherit; color: inherit; }
     // "nome" entra porque o cabecalho o espelha: digitar e ver o nome mudar la
     // em cima e o que confirma que o atendimento vai ser gravado na paciente certa.
     var REDESENHA = ["ng", "np", "na", "ncesa", "peso", "estatura", "spo2", "ano_ult_parto", "creat", "nome"];
+    // Insumos das calculadoras que nao mudam mais nada na tela: atualizam so o
+    // bloco de Calculadoras. Sem isso o cartao seguia em "falta" depois de o
+    // valor ter sido digitado; com redesenho inteiro, o painel rolava.
+    var CALCULA = ["plaq", "tgo"];
     /* Exames de imagem: SO a modalidade redesenha, porque e ela que abre e
        fecha o grupo obstetrico (D-18). Texto, numero e data nao redesenham --
        trocar o no do DOM leva o cursor junto, e a tabela da serie la em cima
@@ -3684,7 +4198,7 @@ button { font: inherit; color: inherit; }
       return;
     }
     if (el.dataset.k) {
-      set(el.dataset.k, el.value);
+      if (el.type === "date") { setData(el, false); } else { set(el.dataset.k, el.value); }
       // NAO redesenha em "input" de campo de data. O navegador PROIBE ler
       // selectionStart em type="date", entao o render() nao tem posicao para
       // restaurar: ele foca o campo e o cursor volta para o PRIMEIRO segmento.
@@ -3692,12 +4206,13 @@ button { font: inherit; color: inherit; }
       // acontece no evento "change", que so dispara com a data completa --
       // e e so entao que DPP e IG tem o que derivar.
       if (REDESENHA.indexOf(el.dataset.k) >= 0) { render(); }
+      else if (CALCULA.indexOf(el.dataset.k) >= 0) { atualizarCalculadoras(); }
       return;
     }
     if (el.dataset.gl) { set("gl_" + el.dataset.gl, el.value); render(); return; }
     if (el.dataset.vacdata) { set("vacd_" + el.dataset.vacdata, el.value); return; }
     if (el.hasAttribute("data-ret-livre")) { set("retorno", el.value); return; }
-    if (el.id === "ig-campo") { set("ig_informada", el.value); return; }
+    if (el.id === "ig-campo") { set("ig_informada", el.value); atualizarCalculadoras(); return; }
   });
 
   /* Fechar por ESC ou por clique no fundo apagaria ate 157 campos digitados.
