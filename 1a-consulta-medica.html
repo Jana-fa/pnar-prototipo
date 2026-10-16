@@ -3578,27 +3578,20 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
 
   /* Coluna que o contrato ja tem e o banco AINDA NAO. Mandar a chave derrubaria
      o INSERT inteiro com PGRST204 -- o modo de falha das sorologias e do HPP.
-     Enquanto a migracao nao for aplicada E conferida (conferir_supabase.py),
-     o campo fica de fora da gravacao, o popup diz qual, e o texto segue na
-     exportacao. Esvaziar esta lista e o passo seguinte a conferencia. */
-  var AGUARDA_MIGRACAO = { raciocinio_clinico: "014" };
-  /* Migracao 015 (D-43): as 33 colunas da 1a rodada de feedback. Mesma regra
-     da 014 -- tirar daqui so depois de conferir_supabase.py e conferir_banco.py
-     acharem as colunas, e inverter os casos de scripts/conferir_rodada1_campos.mjs. */
-  ["fam_preeclampsia_eclampsia", "ferritina", "vitamina_b12", "vitamina_d",
-   "hemograma_data", "glicose_data", "creatinina_data", "tgo_data", "totg_data", "tsh_data",
-   "t4_livre_data", "ferritina_data", "vitamina_b12_data", "vitamina_d_data",
-   "soro_vdrl_data", "soro_hiv_data", "soro_hbsag_data", "soro_anti_hbs_data", "soro_anti_hcv_data",
-   "soro_toxo_igg_data", "soro_toxo_igm_data", "soro_cmv_igg_data", "soro_cmv_igm_data", "soro_htlv_data",
-   "vac_dt_dose1_data", "vac_dt_dose2_data",
-   "vac_hepatite_b_dose1_data", "vac_hepatite_b_dose2_data", "vac_hepatite_b_dose3_data",
-   "cond_exames_laboratoriais", "cond_exames_laboratoriais_quais",
-   "cond_exames_imagem", "cond_exames_imagem_quais"].forEach(function (c) { AGUARDA_MIGRACAO[c] = "015"; });
+     Enquanto a migracao nao for aplicada E conferida (conferir_supabase.py e
+     conferir_banco.py), o campo fica aqui: de fora da gravacao, o popup diz
+     qual, e o texto segue na exportacao. Esvaziar e o passo seguinte a
+     conferencia.
+     VAZIA desde 2026-10-15: a 014 (raciocinio_clinico) e a 015 (as 33 colunas
+     da 1a rodada de feedback, D-43) foram aplicadas no painel e conferidas
+     pelos dois scripts contra o banco real. A trava fica para a proxima. */
+  var AGUARDA_MIGRACAO = {};
   /* VALOR que o contrato ja tem e o banco ainda nao (ENUM sem o valor): a
      trava por coluna nao pega, e o Postgres recusaria a linha INTEIRA com
      22P02 -- a classe do acidente das sorologias (D-40). O campo fica de fora
-     e o popup diz qual valor faltou. */
-  var AGUARDA_VALOR = { "achado_exame:nao_avaliado": "015" };
+     e o popup diz qual valor faltou. Formato: { "dominio:valor": "migracao" }.
+     VAZIA desde 2026-10-15: "nao_avaliado" em achado_exame entrou com a 015. */
+  var AGUARDA_VALOR = {};
   // Nomes do popup: quem atende le "ferritina", nao a chave interna.
   var NOMES_LEGIVEIS = {
     racio: "raciocínio clínico", fam_peec: "pré-eclâmpsia/eclâmpsia na família",
