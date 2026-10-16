@@ -314,6 +314,24 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
 }
 .cartao-calc__notas li { margin-bottom: 2px; }
 
+/* Cada calculadora num painel proprio, na gramatica do cartao do AGMEJC
+   (public/stylesheets/agmejc.css: borda de 1px, titulo sobre fio de 2px).
+   Antes as duas eram secoes comuns empilhadas: o titulo da HPP, 11px cinza em
+   caixa alta, ficava a 21px do cartao do fullPIERS e lia como mais um topico
+   dele. Sem cor de destaque por calculadora: cor neste bloco ja quer dizer
+   nivel de risco (borda e selo do cartao-calc). O titulo sai da caixa alta
+   tambem porque o nome e "fullPIERS", nao "FULLPIERS". */
+.calc {
+  border: 1px solid var(--borda-forte); border-radius: 4px; background: var(--branco);
+  padding: 12px 16px 16px; margin-bottom: 28px;
+}
+.calc > .secao__titulo {
+  font-size: 15px; font-weight: 600; color: var(--texto-forte);
+  text-transform: none; letter-spacing: 0;
+  border-bottom: 2px solid var(--borda); padding-bottom: 8px; margin-bottom: 10px;
+}
+.calc__desc { font-size: 12px; margin: 0 0 10px; }
+
 .sub-eixo {
   font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--texto-fraco); font-weight: 700; background: #f4f6f8;
@@ -332,8 +350,15 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
    invalido e a grade vira uma coluna -- e o que a medicao quer. */
 .linhas-cond {
   display: grid; gap: 0 28px;
-  grid-template-columns: repeat(auto-fill, minmax(calc(var(--rot, 300px) + 210px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--rot, 300px) + var(--ctl, 210px)), 1fr));
 }
+/* --ctl e a reserva do controle: 210 px cabem "Nao | Sim | Nao sabe". Na HPP
+   o controle e um selo, e o mais largo ("fora da faixa") tem ~85 px. Com a
+   reserva cheia e rotulos de ~385 px, a HPP caia numa coluna so a qualquer
+   largura, enquanto o fullPIERS tinha tres. Com 110 px ela fica em duas a
+   partir de ~1330 px de tela. O fullPIERS fica nos 210: seus selos levam a
+   conversao da unidade e passam de 200 px. */
+.linhas-cond--selo { --ctl: 110px; }
 /* Rotulo em coluna de largura FIXA, nao 1fr. Com 1fr as bordas DIREITAS dos
    controles e que alinham, e a esquerda passa a variar conforme o numero de
    opcoes -- o olho perde o ponto de partida, que e justamente o que a gramatica
@@ -415,6 +440,7 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
   .campos { grid-template-columns: 1fr; }
   .campo--g { grid-column: span 1; }
   .painel { padding: 14px 12px 24px; }
+  .calc { padding: 10px 12px 12px; }
 
   .chips { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
   .chips .atalho { font-size: 12px; padding: 8px 6px; }
@@ -1230,8 +1256,8 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     // Sem porteiro por 361: a medica determinou que a calculadora roda em todo
     // caso que tenha os dados. A pressuposicao de pre-eclampsia do modelo
     // continua registrada, mas como ressalva do cartao, nao como bloqueio.
-    h += '<div class="secao"><div class="secao__titulo">fullPIERS</div>' +
-      '<p style="font-size:12px;margin:0 0 10px">Risco de desfecho materno adverso na ' +
+    h += '<div class="secao calc"><div class="secao__titulo">fullPIERS</div>' +
+      '<p class="calc__desc">Risco de desfecho materno adverso na ' +
       "<b>pré-eclâmpsia</b>.</p>";
 
     var linhasPiers = "";
@@ -1367,10 +1393,10 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     topicosHpp.push("Não considera descolamento prematuro de placenta nesta gestação, fator alto do " +
       "quadro: a pergunta saiu da 1ª consulta a pedido dos médicos");
 
-    h += '<div class="secao"><div class="secao__titulo">Hemorragia pós-parto (HPP)</div>' +
-      '<p style="font-size:12px;margin:0 0 10px">Estratificação de risco anteparto, adaptada do ' +
+    h += '<div class="secao calc"><div class="secao__titulo">Hemorragia pós-parto (HPP)</div>' +
+      '<p class="calc__desc">Estratificação de risco anteparto, adaptada do ' +
       "<b>Quadro 3</b> da OPAS 2018 (Quadro 5 do protocolo Einstein).</p>" +
-      grupoLinhas(linhasHPP) +
+      grupoLinhas(linhasHPP, "linhas-cond--selo") +
       '<div class="cartao-calc cartao-calc--' + corHpp + '">' +
       '<div class="cartao-calc__topo">' +
       '<div><div class="cartao-calc__rot">Classificação de risco</div>' +
@@ -2348,9 +2374,10 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
       tri(chave, opcoes || SIM_NAO) + "</div>";
   }
 
-  /* Agrupa linhas numa grade de 2 colunas quando a tela permite. */
-  function grupoLinhas(html) {
-    return '<div class="linhas-cond">' + html + "</div>";
+  /* Agrupa linhas numa grade de 2 colunas quando a tela permite. mod e uma
+     classe a mais no grupo (linhas-cond--selo: selo no lugar do controle). */
+  function grupoLinhas(html, mod) {
+    return '<div class="linhas-cond' + (mod ? " " + mod : "") + '">' + html + "</div>";
   }
 
   /* As 14 condicoes renderizadas para UM eixo temporal so. Chamado duas vezes:
