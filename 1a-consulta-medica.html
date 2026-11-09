@@ -88,6 +88,23 @@ button { font: inherit; color: inherit; }
 .fechar:hover { opacity: 1; }
 
 .modal__corpo { display: flex; flex: 1; min-height: 0; }
+/* Fim do atendimento (D-44): o painel inteiro mora num <fieldset>, e travar a
+   consulta (gravando, sem confirmação, finalizada) é um atributo só. O que
+   está marcado continua visível — só deixa de responder. */
+/* display: contents -- o fieldset nao gera caixa: as margens e a altura das
+   secoes ficam exatamente como eram. O "disabled" vale do mesmo jeito. */
+.painel__campos { display: contents; }
+.painel__campos:disabled input, .painel__campos:disabled textarea,
+.painel__campos:disabled select { background: var(--fundo); cursor: default; }
+.painel__campos:disabled button { cursor: default; }
+.faixa { display: flex; gap: 10px; align-items: flex-start; padding: 9px 18px;
+  font-size: 12px; border-bottom: 1px solid var(--borda); }
+.faixa--info { background: #eafaf6; color: #16a085; }
+.faixa--atencao { background: #fdf6e7; color: #8a6414; }
+.faixa b { display: block; }
+.faixa code { font-size: 11px; }
+.faixa__acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.botao:disabled { opacity: .6; cursor: default; }
 
 /* --- trilho de blocos ----------------------------------------------------- */
 .trilho {
@@ -486,6 +503,9 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
       <button class="fechar" id="fechar" aria-label="Fechar">&times;</button>
     </div>
 
+    <!-- Estado do atendimento (D-44): gravando, sem confirmação ou finalizada. -->
+    <div id="faixa"></div>
+
     <div class="modal__corpo">
       <nav class="trilho" id="trilho"></nav>
       <div class="painel" id="painel"></div>
@@ -496,6 +516,7 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
       <div class="pendentes" id="pendentes"></div>
       <div class="acoes" style="margin-left:auto">
         <button class="botao botao--neutro" id="rascunho">Salvar rascunho</button>
+        <button class="botao botao--neutro" id="nova-paciente">Nova paciente</button>
         <!-- "Finalizar consulta" GRAVA. Exportar deixou de ser o fim do
              atendimento e virou o passo seguinte: sai no popup de confirmacao,
              depois que existe protocolo. A ordem importa — exportar antes de
@@ -521,6 +542,8 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     <div class="modal__rodape">
       <div class="acoes" style="margin-left:auto">
         <button class="botao botao--neutro" id="salvo-fechar">Fechar</button>
+        <button class="botao botao--neutro" id="salvo-nova" hidden>Nova paciente</button>
+        <button class="botao botao--principal" id="salvo-reenviar" hidden>Tentar de novo</button>
         <button class="botao botao--principal" id="salvo-exportar">Exportar atendimento</button>
       </div>
     </div>
@@ -530,7 +553,7 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
 <!-- Popup de exportacao: texto corrido do que foi preenchido, para colar na
      folha de evolucao do sistema atual (AGHU). Texto PURO de proposito --
      o destino e um campo de texto simples, marcacao viraria lixo ao colar. -->
-<div class="fundo-modal" id="modal-export" style="display:none;z-index:60">
+<div class="fundo-modal" id="modal-export" style="display:none;z-index:80">
   <div class="modal" style="max-width:780px;height:auto;max-height:90vh" role="dialog" aria-modal="true" aria-label="Exportar atendimento">
     <div class="modal__topo">
       <div class="modal__titulo">Exportar atendimento <small>texto para colar na folha de evolução</small></div>
@@ -1424,7 +1447,13 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
       ' <span class="selo-derivado">por nascimento</span></label>' +
       '<input data-derivado="idade" value="' + (id === null ? "" : id + " anos") +
       '" readonly placeholder="informe o nascimento"></div>' +
-      campoTexto("prontuario", "Nº de prontuário", null, "p") +
+      /* O prontuario vai DENTRO de cada exame de imagem (D-34). Com exames que
+         podem estar no banco, muda-lo deixaria exames e consulta com
+         prontuarios diferentes: trava, e diz por que (D-44). */
+      (examesFixos()
+        ? campoTexto("prontuario", "Nº de prontuário", null, "p")
+            .replace("<input ", '<input disabled title="Travado: já foi enviado nos exames de imagem" ')
+        : campoTexto("prontuario", "Nº de prontuário", null, "p")) +
       /* Abre com hoje e pode ser corrigida antes de finalizar (pendencia 16,
          resolvida em 2026-09-03): atendimento digitado no dia seguinte e caso
          real, e a IG e a DPP sao congeladas contra ESTA data, nao contra o
@@ -2107,22 +2136,27 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
           '<td style="white-space:nowrap">' +
           '<button type="button" class="atalho" data-ex-editar="' + i + '">' +
           (i === exameEdit ? "editando" : "abrir") + "</button> " +
-          '<button type="button" class="atalho" data-ex-remover="' + i + '">remover</button></td></tr>';
+          '<button type="button" class="atalho" data-ex-remover="' + i + '"' +
+          (examesTravados() ? " disabled" : "") + ">remover</button></td></tr>";
       });
       h += "</tbody></table></div>";
     }
 
     if (exameEdit === null) {
       h += '<div style="margin-top:14px">' +
-        '<button type="button" class="botao botao--principal" data-ex-novo="1">' +
-        "Registrar exame de imagem</button></div>";
+        '<button type="button" class="botao botao--principal" data-ex-novo="1"' +
+        (examesTravados() ? " disabled" : "") + ">Registrar exame de imagem</button></div>";
       return h;
     }
 
     /* ---- formulario do exame aberto ---- */
     var e = exameAtual();
+    var exTrava = examesTravados();
     h += '<div class="secao" style="margin-top:16px;border:1px solid #c7d0d9;border-radius:4px;padding:12px">' +
-      '<div class="secao__titulo">Exame ' + (exameEdit + 1) + " de " + exames.length + "</div>";
+      '<div class="secao__titulo">Exame ' + (exameEdit + 1) + " de " + exames.length +
+      (!exTrava ? "" : sit.x === "ok" ? " · só leitura: já gravado no banco"
+        : sit.x === "incerto" ? " · só leitura: pode estar no banco" : " · só leitura") + "</div>" +
+      '<fieldset class="painel__campos"' + (exTrava ? " disabled" : "") + ">";
 
     h += '<div class="campos">' +
       exData("data_exame", "Data do exame") +
@@ -2180,9 +2214,12 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
       exArea("achados_principais", "Achados principais") +
       exArea("conclusao", "Conclusão do laudo") + "</div></div>";
 
+    h += "</fieldset>";
     h += '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">' +
-      '<button type="button" class="botao botao--principal" data-ex-fechar="1">Concluir este exame</button>' +
-      '<button type="button" class="botao" data-ex-novo="1">Concluir e registrar outro</button></div>';
+      '<button type="button" class="botao botao--principal" data-ex-fechar="1">' +
+      (exTrava ? "Fechar este exame" : "Concluir este exame") + "</button>" +
+      '<button type="button" class="botao" data-ex-novo="1"' + (exTrava ? " disabled" : "") +
+      ">Concluir e registrar outro</button></div>";
 
     h += "</div>";
     return h;
@@ -2709,10 +2746,18 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
       try { pos = ativo.selectionStart; } catch (e) { pos = null; }
     }
 
+    /* Um <fieldset> por secao, DENTRO dela: as secoes continuam filhas diretas
+       do painel (a rolagem e as suites leem "#painel > .bloco-sec"). */
+    /* Exames de imagem travam por dentro (telas.imagem): "abrir" um exame e
+       leitura, e precisa funcionar com a consulta travada. */
     painel.innerHTML = BLOCOS.map(function (b) {
+      var trava = travada() && b.id !== "imagem" ? " disabled" : "";
       return '<section class="bloco-sec" id="sec-' + b.id + '" data-sec="' + b.id + '">' +
-        (telas[b.id] ? telas[b.id]() : "") + "</section>";
+        '<fieldset class="painel__campos"' + trava + ">" +
+        (telas[b.id] ? telas[b.id]() : "") + "</fieldset></section>";
     }).join("");
+    desenharFaixa();
+    desenharAcoes();
     ajustarRotulos();
     desenhaTrilho();
     desenhaPiers();
@@ -3221,16 +3266,25 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
        exportacao abre dentro da confirmacao (D-29), entao sempre existe
        quando este texto e montado; a guarda e para nao inventar uma chave
        num texto sem gravacao. */
-    var chave = ultimoProtocolo
+    /* D-44: a chave só sai com a consulta FINALIZADA. Antes disso o protocolo
+       pode não existir no banco -- ou, depois de uma recusa, vir a existir
+       com outro conteúdo --, e o texto colado no AGHU levaria recibo falso. */
+    var chave = estado === "finalizada" && protocoloAtual
       ? "\nChave de continuidade PNAR · gestação " + gestacaoAtual() +
-        " · atendimento " + ultimoProtocolo
-      : "";
+        " · atendimento " + protocoloAtual
+      : estado === "enviando" || estado === "nao_confirmada"
+        ? "\nGravação no banco do PNAR NÃO confirmada: sem chave de continuidade. Exporte de novo depois da confirmação."
+        : "\nConsulta NÃO gravada no banco do PNAR: sem chave de continuidade.";
     return cab + "\n" + corpo + rodape + chave;
   }
 
   function abrirExportacao() {
     document.getElementById("export-texto").value = montarExportacao();
     document.getElementById("modal-export").style.display = "flex";
+    // Só conta o texto que leva a chave: exportar antes de gravar não basta.
+    if (estado === "finalizada") { exportou = true; }
+    var cp = document.getElementById("export-copiar");
+    if (cp) { cp.focus(); }
   }
 
   function copiarExportacao(botao) {
@@ -3507,8 +3561,9 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
      a GESTACAO, nao o atendimento. Nasce aqui, no primeiro atendimento, e e
      copiada na consulta e em cada exame de imagem; os atendimentos seguintes
      vao recebe-la pela chave de continuidade que sai na exportacao. Uma por
-     carregamento da pagina: re-finalizar a mesma consulta reaproveita a
-     chave; pagina nova, paciente nova, chave nova. Aleatoria, e nao derivada
+     PACIENTE: reenviar a mesma consulta reaproveita a chave, e "Nova
+     paciente" a zera (D-44) -- antes ela durava o carregamento da pagina, e
+     a paciente seguinte gravava com a gestacao da anterior. Aleatoria, e nao derivada
      da DUM: a DUM e corrigida por ultrassom, e chave que muda quando o dado
      e corrigido nao e chave. */
   var gestacaoId = null;
@@ -3516,10 +3571,50 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     if (!gestacaoId) { gestacaoId = uuid(); }
     return gestacaoId;
   }
-  /* O recibo da ultima gravacao. A exportacao so abre depois de gravar
-     (D-29), e e nela que o protocolo precisa viajar para o proximo
-     atendimento -- ate 2026-09-02 ele aparecia so no popup. */
-  var ultimoProtocolo = null;
+  /* ---- ciclo do atendimento (D-44) ------------------------------------ *
+   *
+   * Cada tabela tem a sua situacao, acumulada ao longo das tentativas:
+   *   "nada"     nao esta no banco, ate onde se sabe (nunca enviada, ou o
+   *              banco a recusou de vez sem nenhum envio incerto antes)
+   *   "incerto"  pode estar (estouro, rede, 5xx, 408/429, corpo cortado); uma
+   *              recusa DEPOIS disso nao prova nada e mantem "incerto"
+   *   "ok"       o banco confirmou (201, ou 23505 da restricao do protocolo);
+   *              nao volta atras, e nao e reenviada
+   *
+   *   consulta ok e exames ok/ausentes/recusados de vez ──▶ finalizada
+   *   consulta "nada" (recusada de vez)                 ──▶ aberta: corrige e
+   *        reenvia com o MESMO protocolo; exames que podem estar no banco
+   *        ficam travados e vao como foram (ou nao vao, se ja "ok")
+   *   qualquer outro caso                               ──▶ nao_confirmada,
+   *        travada; "Tentar de novo" reenvia o que nao e "ok", igual
+   *   resposta tardia: registra a situacao, e so fecha quem ainda espera
+   *   "Nova paciente": tudo do zero, gestacao nova
+   *
+   * Nenhum conteudo diferente vai com um protocolo que pode estar no banco: e
+   * isso que impede o 23505 de chamar de "ja gravada" outra coisa. */
+  var estado = "aberta";
+  var protocoloAtual = null; // nasce no 1º "Finalizar" e só muda na nova paciente
+  var enviado = null;        // o ultimo corpo de cada tabela: { linha, exames, probEx, base }
+  var exportou = false;      // só conta exportar a consulta FINALIZADA
+  var atendimento = 0;       // muda a cada nova paciente: resposta atrasada da anterior é ignorada
+  var sit = { c: "nada", x: "nada" };
+  var recusou = { c: null, x: null };   // a recusa definitiva mais recente de cada tabela
+  var jaEstava = { c: false, x: false };
+  var guardadaLocal = false; // a cópia no navegador pegou? (pode estar bloqueado)
+  var erroLocal = null;      // por que nao pegou
+  /* Um protocolo por exame, fixado na primeira montagem: a mesma linha que a
+     tela reenvia tem de ir com o mesmo recibo, e a copia local substitui em
+     vez de duplicar. Fora do objeto do exame para nao virar "campo". */
+  var protocoloDoExame = new WeakMap();
+  function travada() { return estado !== "aberta"; }
+  function examesFixos() { return sit.x === "ok" || sit.x === "incerto"; }
+  function examesTravados() { return travada() || examesFixos(); }
+  /* Nome proprio: "preenchidos(bloco)" ja existe e alimenta o trilho. */
+  function totalPreenchido() {
+    return Object.keys(dados).filter(function (k) {
+      return !(k === "data_consulta" && dados[k] === hojeLocal());
+    }).length + examesPreenchidos().length;
+  }
 
   function uuid() {
     if (window.crypto && crypto.randomUUID) { return crypto.randomUUID(); }
@@ -3707,9 +3802,10 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
         tem = true;
       });
       if (!tem) { return; }
-      /* Um protocolo POR EXAME, gerado aqui: a gravacao e cega (D-30) e o
-         recibo tem que ser um id que o navegador ja conhecia. */
-      linha.protocolo = uuid();
+      /* Um protocolo POR EXAME, gerado no navegador: a gravacao e cega (D-30)
+         e o recibo tem que ser um id que ele ja conhecia. Fixo por exame. */
+      if (!protocoloDoExame.has(e)) { protocoloDoExame.set(e, uuid()); }
+      linha.protocolo = protocoloDoExame.get(e);
       /* Cabecalho de serie (D-35): a gestacao e o atendimento que registrou
          o exame -- o navegador conhece os dois aqui, sem ler nada. E por
          gestacao_id que a serie de uma gestacao se le em qualquer tabela. */
@@ -3761,7 +3857,10 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
   function gravarLocal(linha) {
     try {
       var k = "pnar:atendimentos";
-      var l = JSON.parse(localStorage.getItem(k) || "[]");
+      // O reenvio repete o protocolo: substitui a cópia em vez de duplicá-la.
+      var l = JSON.parse(localStorage.getItem(k) || "[]").filter(function (x) {
+        return !x || x.protocolo !== linha.protocolo;
+      });
       l.push(linha);
       localStorage.setItem(k, JSON.stringify(l));
       return { ok: true, total: l.length };
@@ -3775,7 +3874,10 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     if (!linhas.length) { return { ok: true, total: 0 }; }
     try {
       var k = "pnar:exames-imagem";
-      var l = JSON.parse(localStorage.getItem(k) || "[]");
+      var novos = linhas.map(function (x) { return x.protocolo; });
+      var l = JSON.parse(localStorage.getItem(k) || "[]").filter(function (x) {
+        return !x || novos.indexOf(x.protocolo) < 0;
+      });
       linhas.forEach(function (x) { l.push(x); });
       localStorage.setItem(k, JSON.stringify(l));
       return { ok: true, total: l.length };
@@ -3789,8 +3891,12 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
   var ESPERA_SERVIDOR_MS = 12000;
 
   /* `corpo` pode ser um objeto (uma linha) ou um array (varias de uma vez, o
-     caso dos exames de imagem) — o PostgREST aceita os dois no mesmo POST. */
-  function enviarServidor(tabela, corpo) {
+     caso dos exames de imagem) — o PostgREST aceita os dois no mesmo POST.
+     Devolve { ok, jaGravada, incerto, erro }. `incerto` e o desfecho que a
+     tela nao sabe -- estouro, rede, 5xx, corpo cortado: o envio pode ter
+     chegado. A resposta que chega DEPOIS do estouro vai para `aoChegarTarde`. */
+  function enviarServidor(tabela, corpo, aoChegarTarde) {
+    var estourou = false, relogio = null;
     var corrida = fetch(SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + tabela, {
       method: "POST",
       headers: {
@@ -3806,72 +3912,140 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     }).then(function (r) {
       if (r.ok) { return { ok: true }; }
       return r.text().then(function (t) {
-        return { ok: false, erro: "HTTP " + r.status + " \u00b7 " + t.slice(0, 400) };
+        var cod = "";
+        try { cod = JSON.parse(t).code || ""; } catch (e) { cod = ""; }
+        /* Protocolo repetido (D-44): o UNIQUE de cada tabela e o protocolo,
+           e o protocolo so se repete no reenvio. E o banco dizendo que o
+           envio anterior chegou -- gravado, uma vez so. O lote de exames e
+           atomico: ou entrou inteiro antes, ou nao entrou. */
+        if (r.status === 409 && cod === "23505" && /protocolo_unico/.test(t)) {
+          return { ok: true, jaGravada: true };
+        }
+        // 23505 de OUTRA restricao (chave primaria, UNIQUE futura): a linha
+        // nao entrou. 408 e 429 sao do caminho, nao do dado: incertos.
+        return { ok: false, incerto: r.status >= 500 || r.status === 408 || r.status === 429,
+          erro: "HTTP " + r.status + " · " + t.slice(0, 400) };
+      }, function (e) {
+        return { ok: false, incerto: r.status >= 500 || r.status === 409,
+          erro: "HTTP " + r.status + " · a resposta veio cortada (" +
+            (e && e.message ? e.message : e) + ")" };
       });
     }, function (e) {
-      return { ok: false, erro: "rede: " + (e && e.message ? e.message : e) };
+      return { ok: false, incerto: true, erro: "rede: " + (e && e.message ? e.message : e) };
+    }).then(null, function (e) {
+      return { ok: false, incerto: true, erro: "erro inesperado: " + (e && e.message ? e.message : e) };
     });
-    /* O INSERT pode ter chegado mesmo depois do teto — por isso o texto do
-       tempo esgotado diz "não deu resposta", e não "não gravou". Afirmar que
-       nao gravou seria tao ruim quanto afirmar que gravou. */
+    corrida.then(function (r) {
+      if (relogio) { clearTimeout(relogio); }
+      if (estourou && aoChegarTarde) { aoChegarTarde(r); }
+    });
+    /* O INSERT pode ter chegado mesmo depois do teto — por isso o tempo
+       esgotado e desfecho INCERTO, nao falha. */
     var estouro = new Promise(function (resolve) {
-      setTimeout(function () {
-        resolve({ ok: false, erro: "o servidor não deu resposta em " +
-          (ESPERA_SERVIDOR_MS / 1000) + " s (o envio pode ter chegado assim mesmo)" });
+      relogio = setTimeout(function () {
+        estourou = true;
+        resolve({ ok: false, incerto: true, erro: "o servidor não deu resposta em " +
+          (ESPERA_SERVIDOR_MS / 1000) + " s" });
       }, ESPERA_SERVIDOR_MS);
     });
     return Promise.race([corrida, estouro]);
   }
 
-  /* Desenha o popup de confirmacao. Recebe o estado real da gravacao e nunca
-     o enfeita: sem servidor configurado, o titulo NAO diz "salva no sistema".
-     "Exportar atendimento" fica disponivel nos tres desfechos — inclusive no
-     de falha, que e justamente quando nao se pode perder o texto. */
+  /* Desenha o popup de confirmacao. Nunca enfeita o desfecho (D-29), e diz
+     o de CADA tabela: a consulta e os exames de imagem podem ter desfechos
+     diferentes, e juntar os dois num "salva" esconderia metade -- justamente
+     onde doi, porque a chave publica nao le de volta. "Exportar atendimento"
+     fica disponivel em todos os desfechos. */
   function mostrarSalvo(e) {
-    /* Sao DUAS tabelas desde a D-34, e elas podem ter desfechos diferentes.
-       Dizer so "Consulta salva" quando os exames de imagem falharam seria
-       mentir por omissao — e a omissao some justamente onde doi, porque a
-       chave publica nao le de volta para ninguem conferir depois. */
-    var cor = e.pendente ? "medio"
-      : (!e.ok ? "ruim" : (e.examesErro ? "medio" : (e.onde === "servidor" ? "bom" : "medio")));
+    var temEx = !!e.exames, fin = e.estado === "finalizada";
+    var exNao = temEx && sit.x === "nada";            // exames recusados de vez
+    var exSemConf = temEx && sit.x === "incerto";     // podem estar no banco
+    var incertoC = sit.c === "incerto", recusaC = incertoC && !!recusou.c;
+    var cor = e.pendente || e.estado === "nao_confirmada" ? "medio"
+      : fin ? (exNao || exSemConf || e.onde !== "servidor" ? "medio" : "bom") : "ruim";
     var titulo = e.pendente ? "Gravando…"
-      : (!e.ok ? "Não foi possível gravar"
-        : (e.examesErro ? "Consulta salva; exames de imagem não"
-          : (e.onde === "servidor" ? "Consulta salva" : "Consulta salva neste navegador")));
+      : e.estado === "nao_confirmada" ? "Gravação não confirmada"
+      : fin ? (e.onde !== "servidor" ? "Consulta salva neste navegador"
+        : (exNao ? "Consulta salva; exames de imagem não"
+          : exSemConf ? "Consulta salva; exames de imagem sem confirmação" : "Consulta salva"))
+      : (temEx && sit.x === "ok" ? "Consulta não gravada; exames de imagem gravados"
+        : exSemConf ? "Consulta não gravada; exames de imagem sem confirmação"
+        : "Não foi possível gravar");
     var topicos = [];
-    /* O popup aparece na hora, antes da resposta do servidor. Botao que fica
-       mudo enquanto a rede pensa e clicado de novo — e cada clique gravaria
-       outro atendimento, que ninguem consegue ver depois, porque a chave nao le. */
+    var semCopia = "A consulta <b>não ficou guardada no navegador</b> (" +
+      esc(e.localErro || "armazenamento indisponível") + ")";
+    var copia = e.localOk ? "A consulta fica guardada neste navegador." : semCopia + ".";
+
+    /* --- a consulta --- */
     if (e.pendente) {
-      topicos.push("Já guardada <b>neste navegador</b>. Enviando para o banco…");
-    }
-    if (e.ok && e.onde === "servidor") {
-      topicos.push("Gravada no banco do PNAR e também neste navegador, como cópia.");
-    } else if (e.ok) {
+      topicos.push(e.localOk ? "Já guardada <b>neste navegador</b>. Enviando para o banco…"
+        : "Enviando para o banco… " + semCopia + ".");
+    } else if (sit.c === "ok" && e.onde !== "servidor") {
       topicos.push("Gravada <b>somente neste navegador</b> — o banco ainda não está " +
         "configurado nesta tela. Sai do ar se o histórico do navegador for limpo.");
+    } else if (sit.c === "ok") {
+      topicos.push(jaEstava.c
+        ? "<b>A consulta já estava gravada:</b> um envio anterior tinha chegado ao banco. Nada foi duplicado."
+        : "Consulta gravada no banco do PNAR" + (e.localOk ? " e também neste navegador, como cópia."
+          : ". A cópia no navegador não pegou (" + esc(e.localErro || "armazenamento indisponível") + ")."));
+      if (e.tardiaT === "c") { topicos.push("O banco confirmou a consulta depois do tempo de espera."); }
+    } else if (recusaC) {
+      topicos.push("<b>Motivo:</b> " + esc(recusou.c));
+      topicos.push("O banco <b>recusou este reenvio</b> da consulta. Um envio anterior dela ficou " +
+        "sem confirmação e pode estar no banco: por isso a tela não libera a edição — corrigir e " +
+        "reenviar com o mesmo protocolo faria o banco responder “já gravada” sobre um conteúdo que " +
+        "não é o dele. Tentar de novo pode não resolver. A saída é exportar o texto para o AGHU e " +
+        "usar “Nova paciente”. " + copia);
+    } else if (incertoC) {
+      if (e.erroC) { topicos.push("<b>Motivo:</b> " + esc(e.erroC)); }
+      topicos.push("A gravação da consulta não foi confirmada: o envio <b>pode ter chegado</b>. " +
+        "Use “Tentar de novo”: vão os mesmos protocolos, e o que já estiver no banco ele recusa " +
+        "como cópia — nada duplica. " + (e.localOk ? "Até lá, a consulta fica guardada neste navegador."
+          : semCopia + ": exporte o texto antes de sair desta tela."));
+    } else {
+      if (recusou.c) { topicos.push("<b>Motivo:</b> " + esc(recusou.c)); }
+      topicos.push(e.localOk ? "A consulta ficou guardada neste navegador e continua aberta para " +
+        "corrigir e finalizar de novo — vai o mesmo protocolo."
+        : "A consulta continua aberta para corrigir e finalizar de novo. " + semCopia + ".");
     }
-    if (!e.ok && e.erro) { topicos.push("<b>Motivo:</b> " + esc(e.erro)); }
     if (e.protocolo) { topicos.push("Protocolo <code>" + esc(e.protocolo) + "</code>"); }
     /* A chave da gestacao tambem sai no texto da exportacao; aqui e so para
        quem quiser conferir. E o que o proximo atendimento vai pedir. */
     if (e.gestacao) { topicos.push("Gestação (chave do percurso) <code>" + esc(e.gestacao) + "</code>"); }
     if (e.quem) { topicos.push("Paciente: <b>" + esc(e.quem) + "</b>"); }
-    if (e.campos !== undefined) { topicos.push(e.campos + " campo(s) gravado(s)."); }
-    /* Exames de imagem: tabela separada, desfecho separado, dito separado. */
-    if (e.examesErro) {
-      topicos.push("<b>" + e.exames + " exame(s) de imagem NÃO foram gravados no banco:</b> " +
-        esc(e.examesErro) + " — ficaram neste navegador e no texto da exportação.");
-    } else if (e.exames) {
-      topicos.push(e.exames + " exame(s) de imagem gravado(s)" +
-        (e.pendente ? " neste navegador, enviando…" : "") + ".");
+    if (e.campos !== undefined) {
+      topicos.push(e.pendente ? e.campos + " campo(s) enviado(s)."
+        : sit.c === "ok" ? e.campos + " campo(s) gravado(s)."
+        : recusaC ? e.campos + " campo(s) enviado(s); o banco recusou este reenvio."
+        : incertoC ? e.campos + " campo(s) enviado(s); a gravação não foi confirmada."
+        : e.campos + " campo(s) enviado(s), nenhum gravado.");
     }
-    /* Exame gravado sem prontuario fica sem a que paciente pertence: e a
-       unica chave que liga a tabela filha (D-34), e a chave publica nao le
-       para alguem corrigir depois. */
-    if (e.exames && !e.temProntuario) {
-      topicos.push("<b>Sem nº de prontuário:</b> os exames de imagem gravam, mas ficam sem " +
-        "ligação com a paciente. Preencha o prontuário em Identificação.");
+
+    /* --- os exames de imagem: tabela separada, desfecho separado --- */
+    if (temEx) {
+      var nx = e.exames + " exame(s) de imagem ";
+      if (e.pendente) { topicos.push(nx + "enviado(s)."); }
+      else if (sit.x === "ok") {
+        topicos.push((jaEstava.x ? nx + "já estava(m) gravado(s) no banco: nada foi duplicado."
+          : nx + "gravado(s)." + (fin ? "" : " Ficam travados: já estão no banco, e não vão de novo.")) +
+          (e.tardiaT === "x" ? " O banco os confirmou depois do tempo de espera." : ""));
+      } else if (sit.x === "incerto") {
+        topicos.push(nx + (recusou.x ? "sem confirmação: o banco recusou o reenvio, e um envio " +
+          "anterior pode estar no banco. Estão no texto da exportação."
+          : "enviado(s); a gravação não foi confirmada — ficam travados."));
+      } else if (recusou.x) {
+        topicos.push("<b>" + nx + "NÃO foram gravados no banco:</b> " + esc(recusou.x) + " — " +
+          (e.localOk ? "ficaram neste navegador e " : "ficaram ") + "no texto da exportação.");
+      }
+      /* Exame sem prontuario fica sem a que paciente pertence por prontuario.
+         So manda preencher quando ainda da: exames editaveis. */
+      if (!e.temProntuario) {
+        topicos.push(!examesTravados()
+          ? "<b>Sem nº de prontuário:</b> os exames de imagem gravam, mas ficam sem ligação com a " +
+            "paciente. Preencha o prontuário em Identificação."
+          : "<b>Sem nº de prontuário:</b> os exames de imagem foram enviados sem ele; a ligação " +
+            "que resta é a gestação e o protocolo desta consulta.");
+      }
     }
     /* Campo preenchido sem coluna no contrato NAO some calado. Ja pegou o
        edema (coluna desde a D-31) e as datas de vacina (coluna desde
@@ -3896,67 +4070,217 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
       '<div class="cartao-calc cartao-calc--' + cor + '" style="margin-top:0">' +
       '<ul class="cartao-calc__notas" style="margin-top:0"><li>' +
       topicos.join("</li><li>") + "</li></ul></div>";
+    var reenviar = document.getElementById("salvo-reenviar");
+    reenviar.hidden = !!e.pendente || e.estado !== "nao_confirmada";
+    document.getElementById("salvo-nova").hidden = !fin;
     document.getElementById("modal-salvo").style.display = "flex";
+    // O foco entra no popup -- sem isso, Tab e Enter acionavam o "Finalizar"
+    // por tras dele. Com a exportacao aberta POR CIMA (z-index), fica nela.
+    if (document.getElementById("modal-export").style.display !== "flex") {
+      (reenviar.hidden ? document.getElementById("salvo-exportar") : reenviar).focus();
+    }
   }
 
-  /* Trava contra clique duplo. Sem ela, dois cliques gravam dois atendimentos
-     com protocolos diferentes — e a duplicata e invisivel, porque a chave
-     publica nao le de volta. */
-  var enviando = false;
+  /* O que a trava impede. "Abrir"/"fechar" um exame e leitura: passa sempre.
+     Exames que podem estar no banco travam mesmo com a consulta aberta. */
+  function bloqueado(el) {
+    if (!el || !el.closest || !painel.contains(el)) { return false; }
+    if (el.dataset && (el.dataset.exEditar || el.dataset.exFechar)) { return false; }
+    if (el.dataset && el.dataset.k === "prontuario" && examesFixos()) { return true; }
+    return el.closest("#sec-imagem") ? examesTravados() : travada();
+  }
+
+  /* A faixa diz em que ponto o atendimento esta. Exportar mora nela tambem:
+     fechar o popup nao pode levar embora o caminho para o texto do AGHU. */
+  function quemAgora() {
+    var idn = idadeDe(get("dnasc"));
+    return [get("nome"), get("prontuario") ? "prontuário " + get("prontuario") : "",
+      idn === null ? "" : idn + " anos"].filter(function (x) { return x; }).join(" · ");
+  }
+  function desenharFaixa() {
+    var f = document.getElementById("faixa");
+    if (!f) { return; }
+    if (estado === "aberta" && !examesFixos()) { f.innerHTML = ""; return; }
+    var cor = estado === "finalizada" ? "info" : "atencao";
+    var nEx = enviado ? enviado.exames.length : 0;
+    var txt = estado === "aberta"
+      ? "<b>A consulta não foi gravada.</b>" + nEx + " exame(s) de imagem " +
+        (sit.x === "ok" ? "já foram gravados" : "podem ter sido gravados") + " e ficam travados, " +
+        "com o prontuário. Corrija a consulta e finalize de novo — vai o mesmo protocolo, que os " +
+        "liga a ela."
+      : estado === "enviando"
+      ? "<b>Gravando…</b>Os campos ficam travados até o banco responder."
+      : estado === "nao_confirmada"
+        ? "<b>Gravação não confirmada.</b>O envio pode ter chegado ao banco. Os campos ficam " +
+          "travados para que “Tentar de novo” mande exatamente o mesmo, com os mesmos protocolos."
+        : "<b>Consulta finalizada e gravada.</b>O formulário fica só leitura: o que está aqui é " +
+          "o que foi gravado.";
+    var quem = quemAgora();
+    txt += (quem ? " Paciente: " + esc(quem) + "." : "") +
+      (protocoloAtual ? " Protocolo <code>" + esc(protocoloAtual) + "</code>" : "");
+    var botoes = estado === "enviando" ? "" :
+      '<div class="faixa__acoes"><button type="button" class="botao botao--neutro" id="faixa-exportar">' +
+      'Exportar atendimento</button><button type="button" class="botao botao--neutro" id="faixa-nova">' +
+      "Nova paciente</button></div>";
+    f.innerHTML = '<div class="faixa faixa--' + cor + '"><span>' + (cor === "info" ? "✓" : "⚠") +
+      "</span><div>" + txt + botoes + "</div></div>";
+  }
+  function desenharAcoes() {
+    var b = document.getElementById("finalizar");
+    if (!b) { return; }
+    b.disabled = estado === "enviando" || estado === "finalizada";
+    b.textContent = { aberta: "Finalizar consulta", enviando: "Gravando…",
+      nao_confirmada: "Tentar de novo", finalizada: "Consulta finalizada" }[estado];
+    document.getElementById("rascunho").disabled = estado !== "aberta";
+    document.getElementById("nova-paciente").disabled = estado === "enviando";
+  }
+
+  /* Uma consulta, um protocolo (D-44) -- e um protocolo por exame. Vai so o
+     que nao esta confirmado; o que pode estar no banco vai IGUAL. */
+  function registrar(t, r) {
+    if (r.ok) { sit[t] = "ok"; jaEstava[t] = !!r.jaGravada; recusou[t] = null; return; }
+    if (sit[t] === "ok") { return; }
+    if (r.incerto) { sit[t] = "incerto"; recusou[t] = null; return; }
+    recusou[t] = r.erro;   // recusa de vez: "nada" continua "nada", "incerto" continua "incerto"
+  }
+  function decidir(temExames) {
+    /* Com a consulta gravada, exames recusados -- de vez, ou depois de um
+       envio incerto -- encerram: repetir nao muda nada, e a consulta esta no
+       banco. O popup diz que eles nao foram gravados, ou nao confirmados. */
+    var exFeito = !temExames || sit.x === "ok" || !!recusou.x;
+    if (sit.c === "ok" && exFeito) { return "finalizada"; }
+    if (sit.c === "nada") { return "aberta"; }
+    return "nao_confirmada";
+  }
 
   function finalizarConsulta() {
-    if (enviando) { return; }
-    var protocolo = uuid();
-    var m = montarRegistro(protocolo);
-    ultimoProtocolo = protocolo;
-    var mx = montarExames(protocolo);
-    var idn = idadeDe(get("dnasc"));
-    var quem = [get("nome"), get("prontuario") ? "prontuário " + get("prontuario") : "",
-      idn === null ? "" : idn + " anos"].filter(function (x) { return x; }).join(" · ");
-    var base = {
-      protocolo: protocolo, gestacao: gestacaoAtual(), quem: quem,
-      campos: Object.keys(m.linha).length,
-      exames: mx.linhas.length,
-      temProntuario: !!get("prontuario"),
-      semColuna: m.semColuna, semValor: m.semValor, problemas: m.problemas.concat(mx.problemas),
-      // O aviso da secao some de vista ao rolar; quem finaliza o ve de novo aqui.
-      datasPosteriores: datasPosteriores()
-    };
-    /* Campo que a tela nao soube converter NAO cancela a gravacao. Cancelar
-       perderia o atendimento inteiro por causa de um "Não sabe" num tipo
-       sanguineo — e o registro oficial e a evolucao do AGHU, que sai completa
-       na exportacao. O campo fica de fora, e o popup nomeia qual e por que. */
-    var local = gravarLocal(m.linha);
-    var localEx = gravarExamesLocal(mx.linhas);
+    if (estado === "enviando" || estado === "finalizada") { return; }
+    var reenvio = estado === "nao_confirmada";
+    if (estado === "aberta") {
+      protocoloAtual = protocoloAtual || uuid();
+      var m = montarRegistro(protocoloAtual);
+      // Exames que podem estar no banco vao como foram; os outros, remontados.
+      var ex = examesFixos() && enviado ? { linhas: enviado.exames, problemas: enviado.probEx }
+        : montarExames(protocoloAtual);
+      enviado = {
+        linha: m.linha, exames: ex.linhas, probEx: ex.problemas,
+        base: {
+          protocolo: protocoloAtual, gestacao: m.linha.gestacao_id, quem: quemAgora(),
+          campos: Object.keys(m.linha).length, exames: ex.linhas.length,
+          temProntuario: !!get("prontuario"),
+          semColuna: m.semColuna, semValor: m.semValor, problemas: m.problemas.concat(ex.problemas),
+          // O aviso da secao some de vista ao rolar; quem finaliza o ve de novo aqui.
+          datasPosteriores: datasPosteriores()
+        }
+      };
+      exportou = false;
+    }
+    var esta = atendimento;
+    var temExames = enviado.exames.length > 0;
+    /* Campo que a tela nao soube converter NAO cancela a gravacao: o campo fica
+       de fora, e o popup nomeia qual e por que. */
+    var local = gravarLocal(enviado.linha);
+    var localEx = gravarExamesLocal(enviado.exames);
+    var pegou = local.ok && localEx.ok;
+    // No reenvio o conteudo e o mesmo: a copia anterior, com os mesmos
+    // protocolos, continua valendo se esta falhar.
+    guardadaLocal = reenvio ? (guardadaLocal || pegou) : pegou;
+    erroLocal = guardadaLocal ? null : (local.erro || localEx.erro);
+    var base = Object.assign({}, enviado.base, { localOk: guardadaLocal, localErro: erroLocal });
     if (!SUPABASE.url || !SUPABASE.anonKey) {
-      mostrarSalvo(Object.assign({}, base, {
-        ok: local.ok && localEx.ok, onde: "navegador", erro: local.erro || localEx.erro
-      }));
+      if (pegou) { sit.c = "ok"; sit.x = "ok"; estado = "finalizada"; }
+      render();
+      mostrarSalvo(Object.assign({}, base, { estado: estado, onde: "navegador" }));
       return;
     }
-    // Confirmacao na hora, com o que ja e verdade: gravada no navegador.
-    enviando = true;
-    var botao = document.getElementById("finalizar");
-    if (botao) { botao.disabled = true; }
-    mostrarSalvo(Object.assign({}, base, { pendente: true, ok: local.ok, onde: "navegador" }));
+    estado = "enviando";
+    render();
+    mostrarSalvo(Object.assign({}, base, { pendente: true }));
 
-    /* As duas tabelas vao JUNTAS e sao relatadas SEPARADAS. Encadear (so
-       mandar os exames se a consulta passar) perderia os exames por um erro
-       que nao e deles; fundir os desfechos num "ok" so esconderia metade. */
-    Promise.all([
-      enviarServidor("pnar_primeira_consulta", m.linha),
-      mx.linhas.length ? enviarServidor("pnar_exame_imagem", uniformizarChaves(mx.linhas))
-        : Promise.resolve({ ok: true })
-    ]).then(function (res) {
-      var r = res[0], rx = res[1];
-      enviando = false;
-      if (botao) { botao.disabled = false; }
-      mostrarSalvo(Object.assign({}, base, {
-        ok: r.ok, onde: r.ok ? "servidor" : "navegador",
-        erro: r.ok ? null : r.erro + (local.ok ? " — a consulta ficou guardada neste navegador." : ""),
-        examesErro: rx.ok ? null : rx.erro
+    /* Desenha com o envio ATUAL: a resposta tardia pode ser de uma tentativa
+       anterior, e o popup tem de falar da consulta que esta na tela. */
+    function mostrar(tardiaT, erroC) {
+      render();
+      mostrarSalvo(Object.assign({}, enviado.base, {
+        localOk: guardadaLocal, localErro: erroLocal,
+        estado: estado, onde: "servidor", tardiaT: tardiaT, erroC: erroC
       }));
+    }
+    function tardia(t) {
+      return function (r) {
+        if (esta !== atendimento || !r.ok) { return; }
+        registrar(t, r);
+        if ((estado === "enviando" || estado === "nao_confirmada") &&
+            decidir(enviado.exames.length > 0) === "finalizada") {
+          estado = "finalizada";
+          mostrar(t);
+        }
+      };
+    }
+    Promise.all([
+      sit.c === "ok" ? Promise.resolve(null)
+        : enviarServidor("pnar_primeira_consulta", enviado.linha, tardia("c")),
+      !temExames || sit.x === "ok" ? Promise.resolve(null)
+        : enviarServidor("pnar_exame_imagem", uniformizarChaves(enviado.exames), tardia("x"))
+    ]).then(function (res) {
+      if (esta !== atendimento || estado === "finalizada") { return; }
+      if (res[0]) { registrar("c", res[0]); }
+      if (res[1]) { registrar("x", res[1]); }
+      estado = decidir(temExames);
+      mostrar(null, res[0] && !res[0].ok ? res[0].erro : null);
     });
+  }
+
+  /* Comecar outra paciente zera TUDO: respostas, exames de imagem, gestacao,
+     protocolo. A gestacao nascia uma vez por carregamento da pagina, e a
+     paciente seguinte gravava com a da anterior. Pergunta antes quando algo
+     se perderia. */
+  function novaPaciente() {
+    if (estado === "enviando") { return; }
+    var n = totalPreenchido(), quem = quemAgora(), msg = null;
+    if (estado === "aberta" && examesFixos()) {
+      msg = "A consulta" + (quem ? " de " + quem : "") + " não foi gravada, mas " +
+        (enviado ? enviado.exames.length : 0) + " exame(s) de imagem " +
+        (sit.x === "ok" ? "já foram gravados" : "podem ter sido gravados") +
+        " e vão ficar no banco sem a consulta.\n\nComeçar nova paciente mesmo assim? " +
+        "O texto exportado leva a consulta inteira.";
+    } else if (estado === "nao_confirmada" && sit.c === "ok") {
+      msg = "A consulta" + (quem ? " de " + quem : "") + " foi gravada, mas os exames de imagem " +
+        "ficaram sem confirmação.\n\nComeçar nova paciente mesmo assim? Este formulário não " +
+        "terá mais como tentar de novo os exames.";
+    } else if (estado === "aberta" && n) {
+      msg = "Começar nova paciente?\n\nHá " + n + " campo(s) e exame(s) preenchido(s)" +
+        (quem ? " de " + quem : "") + " que ainda não foram gravados e serão descartados." +
+        "\n\nCancele e use “Finalizar consulta” para gravar.";
+    } else if (estado === "nao_confirmada") {
+      msg = "A gravação da consulta" + (quem ? " de " + quem : "") + " não foi confirmada." +
+        "\n\nComeçar nova paciente mesmo assim? " + (guardadaLocal
+          ? "A consulta continua guardada neste navegador, mas este formulário não terá mais como tentar de novo."
+          : "A consulta não ficou guardada no navegador: o que não estiver no texto exportado se perde.");
+    } else if (estado === "finalizada" && !exportou) {
+      msg = "A consulta" + (quem ? " de " + quem : "") + " foi gravada, mas o texto para a " +
+        "evolução do AGHU ainda não foi exportado.\n\nComeçar nova paciente mesmo assim?";
+    }
+    if (msg && !confirm(msg)) { return; }
+    atendimento++;
+    dados = { data_consulta: hojeLocal() };
+    exames = [];
+    exameEdit = null;
+    gestacaoId = null;
+    estado = "aberta";
+    protocoloAtual = null;
+    enviado = null;
+    exportou = false;
+    sit = { c: "nada", x: "nada" };
+    recusou = { c: null, x: null };
+    jaEstava = { c: false, x: false };
+    guardadaLocal = false;
+    document.getElementById("modal-salvo").style.display = "none";
+    document.getElementById("modal-export").style.display = "none";
+    render();
+    mudarBloco("ident");
+    var nome = painel.querySelector('input[data-k="nome"]');
+    if (nome) { nome.focus(); }
   }
 
   /* ---- eventos ----------------------------------------------------------- */
@@ -3966,6 +4290,9 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
 
     if (t.dataset.bloco) { mudarBloco(t.dataset.bloco); return; }
     if (t.dataset.irCalc) { mudarBloco("calc"); return; }
+    // Travada (D-44), nada do painel responde -- o <fieldset disabled> ja
+    // impede o clique; isto e a segunda trava.
+    if (bloqueado(t)) { return; }
 
     // controle de 3 estados: clicar no selecionado volta para "não avaliado"
     if (t.parentElement && t.parentElement.dataset.tri) {
@@ -4030,7 +4357,11 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     if (t.id === "forcar-obst") { set("forcar_obst", "1"); render(); return; }
     if (t.id === "abrir") { document.getElementById("modal").style.display = "flex"; return; }
     if (t.id === "fechar") { tentarFechar(); return; }
-    if (t.id === "finalizar") { finalizarConsulta(); return; }
+    if (t.id === "finalizar" || t.id === "salvo-reenviar") { finalizarConsulta(); return; }
+    if (t.id === "nova-paciente" || t.id === "salvo-nova" || t.id === "faixa-nova") {
+      novaPaciente(); return;
+    }
+    if (t.id === "faixa-exportar") { abrirExportacao(); return; }
     // Exportar so existe dentro da confirmacao, depois que ha protocolo.
     if (t.id === "salvo-exportar") { abrirExportacao(); return; }
     if (t.id === "salvo-fechar" || t.id === "salvo-fechar-x") {
@@ -4174,7 +4505,7 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
        "input" em <select> ou em type="date". NAO redesenha -- quem redesenha
        e o "input" da modalidade; fazer os dois redesenhar dobraria o trabalho
        e trocaria o no do DOM debaixo de um campo de data em digitacao. */
-    if (el.dataset && el.dataset.ex) { exSet(el.dataset.ex, el.value); }
+    if (el.dataset && el.dataset.ex && !bloqueado(el)) { exSet(el.dataset.ex, el.value); }
   });
 
   /* No blur o campo tambem NAO redesenha. A primeira versao redesenhava aqui, e
@@ -4197,6 +4528,7 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
 
   document.addEventListener("input", function (ev) {
     var el = ev.target;
+    if (bloqueado(el)) { return; }
     if (el.hasAttribute && el.hasAttribute("data-num")) { filtraNumero(el); }
     // campos que mudam o que a tela mostra (derivados, avisos, blocos condicionais)
     // "creat" entra por causa do aviso de unidade: digitar valor sem unidade
@@ -4235,19 +4567,11 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     if (el.id === "ig-campo") { set("ig_informada", el.value); atualizarCalculadoras(); return; }
   });
 
-  /* Fechar por ESC ou por clique no fundo apagaria ate 157 campos digitados.
-     Com dados preenchidos, exige confirmacao explicita. */
+  /* Fechar o formulario NAO apaga nada: ele so some de vista, e "Abrir" o
+     traz de volta com a mesma paciente. A confirmacao que havia aqui dizia
+     "serao perdidos" sobre campos que continuavam la (auditoria de
+     2026-11-09). Comecar do zero e "Nova paciente" (D-44), que pergunta. */
   function tentarFechar() {
-    var n = Object.keys(dados).length, nImg = examesPreenchidos().length;
-    // Exame de imagem tambem se perde ao fechar, e sao muitos campos por
-    // exame: contar so `dados` faria o aviso subestimar o que vai embora.
-    var quanto = n + " campo(s) preenchido(s)" +
-      (nImg ? " e " + nImg + " exame(s) de imagem" : "");
-    if ((n || nImg) && !confirm(
-        "Fechar o formulário? Há " + quanto +
-        " que serão perdidos.\n\nCancele e use “Salvar rascunho” se quiser voltar depois.")) {
-      return;
-    }
     document.getElementById("modal").style.display = "none";
   }
 
@@ -4296,7 +4620,35 @@ input.data-exame.herdada { color: var(--texto-fraco); border-style: dashed; }
     return false;
   }
 
+  /* O foco nao sai do popup aberto: atras dele esta o "Finalizar". */
+  function prenderFoco(ev) {
+    if (ev.key !== "Tab") { return false; }
+    var ex = document.getElementById("modal-export"), sv = document.getElementById("modal-salvo");
+    var m = ex.style.display === "flex" ? ex : (sv.style.display === "flex" ? sv : null);
+    if (!m) { return false; }
+    var alvos = Array.prototype.filter.call(m.querySelectorAll("button, textarea"), function (el) {
+      return !el.disabled && !el.hidden && el.offsetParent !== null;
+    });
+    if (!alvos.length) { return false; }
+    var i = alvos.indexOf(document.activeElement);
+    var prox = ev.shiftKey ? (i <= 0 ? alvos.length - 1 : i - 1)
+      : (i < 0 || i === alvos.length - 1 ? 0 : i + 1);
+    alvos[prox].focus();
+    return true;
+  }
+
+  /* Fechar ou recarregar a aba avisa quando alguma coisa se perderia -- o
+     mesmo criterio de "Nova paciente". Aviso, nunca bloqueio (convencao 9). */
+  window.addEventListener("beforeunload", function (ev) {
+    var perde = (estado === "aberta" && totalPreenchido() > 0) || estado === "enviando" ||
+      estado === "nao_confirmada" || (estado === "finalizada" && !exportou);
+    if (!perde) { return; }
+    ev.preventDefault();
+    ev.returnValue = "";
+  });
+
   document.addEventListener("keydown", function (ev) {
+    if (prenderFoco(ev)) { ev.preventDefault(); return; }
     if (tecladoTri(ev)) { ev.preventDefault(); return; }
     if (ev.key === "Escape") {
       // O popup de exportacao fecha primeiro -- e sem confirmacao, porque o
