@@ -126,8 +126,21 @@ button { font: inherit; color: inherit; }
   padding: 7px 14px; border-radius: 3px; font-size: 12.5px;
 }
 .botao--principal { background: var(--verde); border-color: var(--verde); color: #fff; font-weight: 600; }
-.botao--principal:disabled { opacity: .6; cursor: default; }
+.botao:disabled { opacity: .6; cursor: default; }
 .contagem { margin-left: auto; font-size: 11.5px; color: var(--texto-fraco); align-self: center; }
+
+/* O painel inteiro mora num <fieldset>: travar a consulta (enviando, sem
+   confirmação ou finalizada) é um atributo só, e nenhum controle escapa. O
+   que está marcado continua visível — só deixa de responder (D-44). */
+.painel__campos { border: 0; margin: 0; padding: 0; min-width: 0; }
+.painel__campos:disabled .atalho, .painel__campos:disabled input,
+.painel__campos:disabled textarea { cursor: default; }
+.painel__campos:disabled .atalho:hover { background: var(--branco); }
+.painel__campos:disabled .atalho.feito:hover { background: var(--verde); }
+.painel__campos:disabled input, .painel__campos:disabled textarea { background: var(--fundo); }
+#faixa .aviso { margin: 0; border-radius: 0; border-bottom: 1px solid var(--borda); }
+#faixa code { font-size: 11px; }
+.faixa__acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 
 .modal {
   display: none; position: fixed; inset: 0; background: rgba(42, 63, 84, .45);
@@ -166,29 +179,35 @@ button { font: inherit; color: inherit; }
     </div>
   </div>
   <div class="corpo">
+    <!-- Estado do atendimento (D-44): gravando, sem confirmação ou finalizada.
+         Fica FORA do painel para valer em todos os blocos do trilho. -->
+    <div id="faixa"></div>
     <div class="trilho" id="trilho"></div>
     <div class="painel" id="painel"></div>
   </div>
   <div class="acoes">
     <button type="button" class="botao botao--principal" id="finalizar">Finalizar consulta</button>
     <button type="button" class="botao" id="rascunho">Salvar rascunho</button>
+    <button type="button" class="botao" id="nova-paciente">Nova paciente</button>
     <span class="contagem" id="contagem"></span>
   </div>
 </div>
 
 <div class="modal" id="modal-salvo">
-  <div class="modal__caixa">
+  <div class="modal__caixa" role="dialog" aria-modal="true" aria-labelledby="salvo-titulo">
     <h2 id="salvo-titulo"></h2>
     <div id="salvo-corpo"></div>
     <div class="acoes" style="background:none;border:0;padding:12px 0 0">
+      <button type="button" class="botao botao--principal" id="salvo-reenviar" hidden>Tentar de novo</button>
       <button type="button" class="botao botao--principal" id="salvo-exportar">Exportar atendimento</button>
+      <button type="button" class="botao" id="salvo-nova" hidden>Nova paciente</button>
       <button type="button" class="botao" id="salvo-fechar">Fechar</button>
     </div>
   </div>
 </div>
 
 <div class="modal" id="modal-export">
-  <div class="modal__caixa">
+  <div class="modal__caixa" role="dialog" aria-modal="true" aria-label="Exportar atendimento">
     <h2>Texto para colar na evolução do AGHU</h2>
     <textarea id="export-texto" readonly></textarea>
     <div class="acoes" style="background:none;border:0;padding:12px 0 0">
@@ -219,6 +238,9 @@ button { font: inherit; color: inherit; }
    *         com descarte explícito.
    *   D-30  a gravação é cega: a chave pública só INSERE, o protocolo nasce
    *         aqui e `Prefer: return=minimal` é obrigatório.
+   *   D-44  gravar FECHA a consulta: a tela fica só leitura, e a próxima
+   *         paciente começa do zero por "Nova paciente". Uma consulta é um
+   *         protocolo — o reenvio repete o mesmo, e o banco recusa a cópia.
    * ====================================================================== */
 
   var SUPABASE = {
@@ -283,7 +305,41 @@ button { font: inherit; color: inherit; }
   var blocoAtivo = "ident";
   var painel = document.getElementById("painel");
   var trilho = document.getElementById("trilho");
-  var ultimoProtocolo = null;
+
+  /* ---- ciclo do atendimento (D-44) ------------------------------------- *
+   *
+   *   aberta ──Finalizar──▶ enviando ──201──────────────────────▶ finalizada
+   *                                  ──409 (23505)──────────────▶ finalizada ("já estava")
+   *                                  ──estouro/rede/5xx/corpo
+   *                                    cortado/409 ilegível──────▶ nao_confirmada
+   *                                  ──4xx, e NENHUM envio deste
+   *                                    protocolo foi incerto──────▶ aberta (nada gravado)
+   *                                  ──4xx depois de um incerto──▶ nao_confirmada (talvezNoBanco)
+   *   nao_confirmada ──Tentar de novo──▶ enviando, com o MESMO corpo e protocolo
+   *   resposta tardia: só decide quem ainda espera (enviando/nao_confirmada), e só com sucesso
+   *   qualquer estado ──Nova paciente──▶ aberta, do zero
+   *
+   * Fora de "aberta" a tela é só leitura. É o que impede três defeitos medidos
+   * em 2026-11-09: a duplicata do segundo clique, a paciente seguinte herdando
+   * a anterior, e a exportação dizendo uma coisa e o banco outra. */
+  var estado = "aberta";
+  var protocoloAtual = null; // nasce no 1º "Finalizar" e só muda na nova paciente
+  var enviado = null;        // { linha, dados, semColuna, problemas } do último envio
+  var exportou = false;      // só conta exportar a consulta FINALIZADA (o texto leva a chave)
+  var atendimento = 0;       // muda a cada nova paciente: resposta atrasada da anterior é ignorada
+  /* Algum envio deste protocolo teve desfecho incerto: a linha PODE estar no
+     banco. Daí em diante a consulta nunca volta a "aberta" — nem com um 4xx
+     no reenvio —, porque editar e reenviar com o mesmo protocolo faria o
+     23505 chamar de "já gravada" um conteúdo que não é o do banco. */
+  var talvezNoBanco = false;
+  var guardadaLocal = false; // a última cópia no navegador pegou? (pode estar bloqueado)
+  function travada() { return estado !== "aberta"; }
+  /* O que conta como preenchido: tudo, menos a data que a tela pôs sozinha. */
+  function preenchidos() {
+    return Object.keys(dados).filter(function (k) {
+      return !(k === "data_consulta" && dados[k] === hojeLocal());
+    }).length;
+  }
 
   function set(k, v) { if (v === null || v === undefined || v === "") { delete dados[k]; } else { dados[k] = v; } }
   function get(k) { return dados[k]; }
@@ -503,13 +559,56 @@ button { font: inherit; color: inherit; }
         (blocoAtivo === b.id ? ' class="ativo"' : "") + ">" + esc(b.nome) +
         (n ? ' <span class="marca">' + n + "</span>" : "") + "</button>";
     }).join("");
-    painel.innerHTML = telas[blocoAtivo]();
-    document.getElementById("topo-nome").textContent = get("nome") || "—";
-    document.getElementById("topo-pront").textContent = get("prontuario") || "—";
-    document.getElementById("topo-percurso").textContent =
-      get("gestacao_id") ? "vinculado" : "não vinculado";
-    document.getElementById("contagem").textContent =
-      Object.keys(dados).length + " campo(s) preenchido(s)";
+    painel.innerHTML = '<fieldset class="painel__campos"' + (travada() ? " disabled" : "") + ">" +
+      telas[blocoAtivo]() + "</fieldset>";
+    atualizarTopo();
+    desenharFaixa();
+    desenharAcoes();
+  }
+
+  function quemE(d) {
+    return [d.nome, d.prontuario ? "prontuário " + d.prontuario : ""]
+      .filter(function (x) { return x; }).join(" · ");
+  }
+
+  /* A faixa diz em que ponto o atendimento está, em qualquer bloco do trilho.
+     Exportar mora aqui também: fechar o popup não pode levar embora o único
+     caminho para o texto do AGHU (D-29). */
+  function desenharFaixa() {
+    var f = document.getElementById("faixa");
+    if (estado === "aberta") { f.innerHTML = ""; return; }
+    var quem = quemE(enviado ? enviado.dados : dados);
+    var cor, txt;
+    if (estado === "enviando") {
+      cor = "atencao";
+      txt = "<b>Gravando…</b>Os campos ficam travados até o banco responder.";
+    } else if (estado === "nao_confirmada") {
+      cor = "atencao";
+      txt = "<b>Gravação não confirmada.</b>O envio pode ter chegado ao banco. " +
+        "Os campos ficam travados para que “Tentar de novo” mande exatamente o " +
+        "mesmo, com o mesmo protocolo: se já tinha chegado, o banco recusa a cópia.";
+    } else {
+      cor = "info";
+      txt = "<b>Consulta finalizada e gravada.</b>A tela fica só leitura: o que está aqui é " +
+        "o que foi gravado.";
+    }
+    txt += (quem ? " Paciente: <b style=\"display:inline\">" + esc(quem) + "</b>." : "") +
+      (protocoloAtual ? " Protocolo <code>" + esc(protocoloAtual) + "</code>" : "");
+    var botoes = estado === "enviando" ? "" :
+      '<div class="faixa__acoes"><button type="button" class="botao" id="faixa-exportar">' +
+      "Exportar atendimento</button>" +
+      '<button type="button" class="botao" id="faixa-nova">Nova paciente</button></div>';
+    f.innerHTML = '<div class="aviso aviso--' + cor + '"><span>' +
+      (cor === "info" ? "✓" : "⚠") + "</span><div>" + txt + botoes + "</div></div>";
+  }
+
+  function desenharAcoes() {
+    var b = document.getElementById("finalizar");
+    b.disabled = estado === "enviando" || estado === "finalizada";
+    b.textContent = { aberta: "Finalizar consulta", enviando: "Gravando…",
+      nao_confirmada: "Tentar de novo", finalizada: "Consulta finalizada" }[estado];
+    document.getElementById("rascunho").disabled = estado !== "aberta";
+    document.getElementById("nova-paciente").disabled = estado === "enviando";
   }
 
   var MAPA_BLOCO = {
@@ -583,7 +682,10 @@ button { font: inherit; color: inherit; }
   function gravarLocal(linha) {
     try {
       var k = "pnar:anestesia";
-      var l = JSON.parse(localStorage.getItem(k) || "[]");
+      // O reenvio repete o protocolo: substitui a cópia em vez de duplicá-la.
+      var l = JSON.parse(localStorage.getItem(k) || "[]").filter(function (x) {
+        return !x || x.protocolo !== linha.protocolo;
+      });
       l.push(linha);
       localStorage.setItem(k, JSON.stringify(l));
       return { ok: true };
@@ -591,7 +693,13 @@ button { font: inherit; color: inherit; }
   }
 
   var ESPERA_SERVIDOR_MS = 12000;
-  function enviarServidor(corpo) {
+  /* Devolve { ok, jaGravada, incerto, erro }. `incerto` é o desfecho que a
+     tela não sabe — estouro, falha de rede ou 5xx: o envio pode ter chegado.
+     Resposta que chega DEPOIS do estouro não se perde: vai para
+     `aoChegarTarde`, porque a tela não pode continuar dizendo "não
+     confirmada" sobre uma consulta que o banco confirmou. */
+  function enviarServidor(corpo, aoChegarTarde) {
+    var estourou = false, relogio = null;
     var corrida = fetch(SUPABASE.url.replace(/\/$/, "") + "/rest/v1/pnar_consulta_anestesiologia", {
       method: "POST",
       headers: {
@@ -606,36 +714,100 @@ button { font: inherit; color: inherit; }
     }).then(function (r) {
       if (r.ok) { return { ok: true }; }
       return r.text().then(function (t) {
-        return { ok: false, erro: "HTTP " + r.status + " · " + t.slice(0, 400) };
+        var cod = "";
+        try { cod = JSON.parse(t).code || ""; } catch (e) { cod = ""; }
+        /* Protocolo repetido: o protocolo só se repete no reenvio, então é o
+           banco dizendo que o primeiro envio chegou — gravada, uma vez só.
+           Tem de ser a restrição DO PROTOCOLO: 23505 de outra (a chave
+           primária, uma UNIQUE futura) quer dizer que a linha não entrou. */
+        if (r.status === 409 && cod === "23505" && /protocolo_unico/.test(t)) {
+          return { ok: true, jaGravada: true };
+        }
+        // 408 e 429 são do caminho, não do dado: passam, e o envio pode ter chegado.
+        return { ok: false, incerto: r.status >= 500 || r.status === 408 || r.status === 429,
+          erro: "HTTP " + r.status + " · " + t.slice(0, 400) };
+      }, function (e) {
+        // Corpo cortado no meio: o status vale, o código do erro se perdeu. Um
+        // 409 sem corpo legível pode ser o 23505 — então não se sabe.
+        return { ok: false, incerto: r.status >= 500 || r.status === 409,
+          erro: "HTTP " + r.status + " · a resposta veio cortada (" +
+            (e && e.message ? e.message : e) + ")" };
       });
     }, function (e) {
-      return { ok: false, erro: "rede: " + (e && e.message ? e.message : e) };
+      return { ok: false, incerto: true, erro: "rede: " + (e && e.message ? e.message : e) };
+    }).then(null, function (e) {
+      // Qualquer outra exceção no caminho: sem isto a tela ficava presa em
+      // "Gravando…", inteira travada e sem saída.
+      return { ok: false, incerto: true, erro: "erro inesperado: " + (e && e.message ? e.message : e) };
+    });
+    corrida.then(function (r) {
+      if (relogio) { clearTimeout(relogio); }
+      if (estourou && aoChegarTarde) { aoChegarTarde(r); }
     });
     var estouro = new Promise(function (resolve) {
-      setTimeout(function () {
-        resolve({ ok: false, erro: "o servidor não deu resposta em " +
-          (ESPERA_SERVIDOR_MS / 1000) + " s (o envio pode ter chegado assim mesmo)" });
+      relogio = setTimeout(function () {
+        estourou = true;
+        resolve({ ok: false, incerto: true, erro: "o servidor não deu resposta em " +
+          (ESPERA_SERVIDOR_MS / 1000) + " s" });
       }, ESPERA_SERVIDOR_MS);
     });
     return Promise.race([corrida, estouro]);
   }
 
-  /* Nunca enfeita o desfecho: sem servidor configurado, o título não diz
-     "salva no sistema". */
+  /* Nunca enfeita o desfecho (D-29). São cinco títulos, um por situação, e
+     nenhum diz "salva" sem o banco ter dito. */
   function mostrarSalvo(e) {
-    var cor = e.pendente ? "atencao" : (e.ok ? "info" : "erro");
+    var cor = e.pendente || e.incerto ? "atencao" : (e.ok ? "info" : "erro");
     var titulo = e.pendente ? "Gravando…"
+      : e.incerto ? "Gravação não confirmada"
       : (e.ok ? (e.onde === "servidor" ? "Consulta salva" : "Consulta salva neste navegador")
         : "Não foi possível gravar");
     var t = [];
-    if (e.pendente) { t.push("Já guardada <b>neste navegador</b>. Enviando para o banco…"); }
-    if (e.ok && e.onde === "servidor") { t.push("Gravada no banco do PNAR e também neste navegador."); }
-    else if (e.ok) { t.push("Gravada <b>somente neste navegador</b>."); }
+    var semCopia = "A consulta <b>não ficou guardada no navegador</b> (" + esc(e.localErro || "armazenamento indisponível") + ")";
+    if (e.pendente) {
+      t.push(e.localOk ? "Já guardada <b>neste navegador</b>. Enviando para o banco…"
+        : "Enviando para o banco… " + semCopia + ".");
+    }
+    if (e.ok && e.onde === "servidor") {
+      t.push(e.localOk ? "Gravada no banco do PNAR e também neste navegador."
+        : "Gravada no banco do PNAR. A cópia no navegador não pegou (" +
+          esc(e.localErro || "armazenamento indisponível") + ").");
+    }
+    else if (e.ok && !e.pendente) { t.push("Gravada <b>somente neste navegador</b>."); }
+    if (e.jaGravada) {
+      t.push("<b>Esta consulta já estava gravada:</b> o primeiro envio tinha chegado ao banco. " +
+        "Nada foi duplicado.");
+    }
+    if (e.tardia) { t.push("O banco confirmou depois do tempo de espera."); }
     if (!e.ok && e.erro) { t.push("<b>Motivo:</b> " + esc(e.erro)); }
+    if (e.incerto && e.recusa) {
+      t.push("O banco <b>recusou este reenvio</b>. Um envio anterior desta consulta ficou sem " +
+        "confirmação e pode estar no banco: por isso a tela não libera a edição — corrigir e " +
+        "reenviar com o mesmo protocolo faria o banco responder “já gravada” sobre um conteúdo " +
+        "que não é o dele. Tentar de novo pode não resolver. A saída é exportar o texto para o " +
+        "AGHU e usar “Nova paciente”. " +
+        (e.localOk ? "A consulta fica guardada neste navegador." : semCopia + "."));
+    } else if (e.incerto) {
+      t.push("O envio <b>pode ter chegado</b>. Use “Tentar de novo”: vai o mesmo protocolo, e " +
+        "se a consulta já estiver no banco ele recusa a cópia — nada duplica. " +
+        (e.localOk ? "Até lá, a consulta fica guardada neste navegador."
+          : semCopia + ": exporte o texto antes de sair desta tela."));
+    } else if (!e.ok && !e.pendente) {
+      t.push(e.localOk ? "A consulta ficou guardada neste navegador e continua aberta para " +
+        "corrigir e finalizar de novo."
+        : "A consulta continua aberta para corrigir e finalizar de novo. " + semCopia + ".");
+    }
+    if (e.quem) { t.push("Paciente: <b>" + esc(e.quem) + "</b>"); }
     if (e.protocolo) { t.push("Protocolo <code>" + esc(e.protocolo) + "</code>"); }
     if (e.gestacao) { t.push("Gestação <code>" + esc(e.gestacao) + "</code>"); }
     else { t.push("<b>Sem vínculo de percurso:</b> esta consulta não ficou ligada à gestação."); }
-    if (e.campos !== undefined) { t.push(e.campos + " campo(s) gravado(s)."); }
+    if (e.campos !== undefined) {
+      t.push(e.pendente ? e.campos + " campo(s) enviado(s)."
+        : e.ok ? e.campos + " campo(s) gravado(s)."
+        : e.incerto && e.recusa ? e.campos + " campo(s) enviado(s); o banco recusou este reenvio."
+        : e.incerto ? e.campos + " campo(s) enviado(s); a gravação não foi confirmada."
+        : e.campos + " campo(s) enviado(s), nenhum gravado.");
+    }
     if (e.semColuna && e.semColuna.length) {
       t.push("<b>Não foi gravado</b> (sem coluna no contrato): " + esc(e.semColuna.join(", ")));
     }
@@ -647,39 +819,109 @@ button { font: inherit; color: inherit; }
     document.getElementById("salvo-corpo").innerHTML =
       '<div class="aviso aviso--' + cor + '"><span></span><ul class="notas"><li>' +
       t.join("</li><li>") + "</li></ul></div>";
-    document.getElementById("modal-salvo").style.display = "flex";
+    var reenviar = document.getElementById("salvo-reenviar");
+    reenviar.hidden = !e.incerto;
+    document.getElementById("salvo-nova").hidden = estado !== "finalizada";
+    var m = document.getElementById("modal-salvo");
+    m.style.display = "flex";
+    // O foco entra no popup: sem isso, Tab e Enter acionavam o "Finalizar"
+    // por trás do popup aberto. Com a exportação aberta POR CIMA, o foco
+    // fica nela — senão Enter acionaria o "Tentar de novo" escondido.
+    if (document.getElementById("modal-export").style.display !== "flex") {
+      (e.incerto ? reenviar : document.getElementById("salvo-exportar")).focus();
+    }
   }
 
-  /* Trava contra clique duplo: dois cliques gravariam dois atendimentos com
-     protocolos diferentes, e a duplicata é invisível — a chave não lê. */
-  var enviando = false;
+  /* Uma consulta, um protocolo. "Finalizar" de novo depois de gravada não
+     existe (o botão trava); o reenvio de um desfecho incerto manda o MESMO
+     corpo com o MESMO protocolo, e o UNIQUE do banco impede a duplicata. */
   function finalizar() {
-    if (enviando) { return; }
-    var protocolo = uuid();
-    var m = montarRegistro(protocolo);
-    ultimoProtocolo = protocolo;
+    if (estado === "enviando" || estado === "finalizada") { return; }
+    var reenvio = estado === "nao_confirmada";   // mesmo corpo, mesmo protocolo
+    if (estado === "aberta") {
+      protocoloAtual = protocoloAtual || uuid();
+      var m = montarRegistro(protocoloAtual);
+      enviado = { linha: m.linha, dados: JSON.parse(JSON.stringify(dados)),
+        semColuna: m.semColuna, problemas: m.problemas };
+      exportou = false;
+    }
+    var esta = atendimento;
     var base = {
-      protocolo: protocolo, gestacao: get("gestacao_id"),
-      campos: Object.keys(m.linha).length,
-      semColuna: m.semColuna, problemas: m.problemas
+      protocolo: protocoloAtual, gestacao: enviado.dados.gestacao_id,
+      quem: quemE(enviado.dados), campos: Object.keys(enviado.linha).length,
+      semColuna: enviado.semColuna, problemas: enviado.problemas
     };
-    var local = gravarLocal(m.linha);
+    var local = gravarLocal(enviado.linha);
+    // No reenvio o conteúdo é o mesmo: a cópia do envio anterior, com o mesmo
+    // protocolo, continua valendo se esta falhar.
+    guardadaLocal = reenvio ? (guardadaLocal || local.ok) : local.ok;
+    base.localOk = guardadaLocal;
+    base.localErro = guardadaLocal ? null : local.erro;
     if (!SUPABASE.url || !SUPABASE.anonKey) {
+      if (local.ok) { estado = "finalizada"; }
+      render();
       mostrarSalvo(Object.assign({}, base, { ok: local.ok, onde: "navegador", erro: local.erro }));
       return;
     }
-    enviando = true;
-    var botao = document.getElementById("finalizar");
-    botao.disabled = true;
+    estado = "enviando";
+    render();
     mostrarSalvo(Object.assign({}, base, { pendente: true, ok: local.ok, onde: "navegador" }));
-    enviarServidor(m.linha).then(function (r) {
-      enviando = false;
-      botao.disabled = false;
+
+    function desfecho(r, tardia) {
+      // Resposta de outra paciente, ou que chegaria para rebaixar uma
+      // consulta já confirmada: não muda nada.
+      if (esta !== atendimento || estado === "finalizada") { return; }
+      // A resposta tardia só decide a consulta que ainda espera por ela.
+      if (tardia && (!r.ok || (estado !== "enviando" && estado !== "nao_confirmada"))) { return; }
+      if (!r.ok && r.incerto) { talvezNoBanco = true; }
+      var incerto = !r.ok && (r.incerto || talvezNoBanco);
+      estado = r.ok ? "finalizada" : (incerto ? "nao_confirmada" : "aberta");
+      render();
       mostrarSalvo(Object.assign({}, base, {
-        ok: r.ok, onde: r.ok ? "servidor" : "navegador",
-        erro: r.ok ? null : r.erro + (local.ok ? " — a consulta ficou guardada neste navegador." : "")
+        ok: r.ok, onde: r.ok ? "servidor" : "navegador", jaGravada: r.jaGravada,
+        incerto: incerto, tardia: tardia, recusa: incerto && !r.incerto,
+        erro: r.ok ? null : r.erro
       }));
-    });
+    }
+    enviarServidor(enviado.linha, function (r) { desfecho(r, true); })
+      .then(function (r) { desfecho(r, false); });
+  }
+
+  /* Começar outra paciente zera TUDO: respostas, chave colada, gestação,
+     protocolo. Pergunta antes quando alguma coisa se perderia — dado não
+     gravado, gravação não confirmada ou texto do AGHU não exportado. */
+  function novaPaciente() {
+    if (estado === "enviando") { return; }
+    var n = preenchidos(), quem = quemE(dados), msg = null;
+    if (estado === "aberta" && n) {
+      msg = "Começar nova paciente?\n\nHá " + n + " campo(s) preenchido(s)" +
+        (quem ? " de " + quem : "") + " que ainda não foram gravados e serão descartados." +
+        "\n\nCancele e use “Finalizar consulta” para gravar.";
+    } else if (estado === "nao_confirmada") {
+      msg = "A gravação da consulta" + (quem ? " de " + quem : "") + " não foi confirmada." +
+        "\n\nComeçar nova paciente mesmo assim? " + (guardadaLocal
+          ? "A consulta continua guardada neste navegador, mas esta tela não terá mais como tentar de novo."
+          : "A consulta não ficou guardada no navegador: o que não estiver no texto exportado se perde.");
+    } else if (estado === "finalizada" && !exportou) {
+      msg = "A consulta" + (quem ? " de " + quem : "") + " foi gravada, mas o texto para a " +
+        "evolução do AGHU ainda não foi exportado.\n\nComeçar nova paciente mesmo assim?";
+    }
+    if (msg && !confirm(msg)) { return; }
+    atendimento++;
+    dados = { data_consulta: hojeLocal() };
+    estado = "aberta";
+    protocoloAtual = null;
+    enviado = null;
+    exportou = false;
+    talvezNoBanco = false;
+    guardadaLocal = false;
+    blocoAtivo = "ident";
+    document.getElementById("modal-salvo").style.display = "none";
+    document.getElementById("modal-export").style.display = "none";
+    render();
+    window.scrollTo(0, 0);
+    var nome = painel.querySelector('input[data-k="nome"]');
+    if (nome) { nome.focus(); }
   }
 
   /* ---- exportação -------------------------------------------------------- */
@@ -689,6 +931,13 @@ button { font: inherit; color: inherit; }
   }
   var EXP_TRI = { sim: "Sim", nao: "Não", nsabe: "Não sabe" };
   function montarExportacao() {
+    /* Com a consulta travada, exporta-se o que FOI ENVIADO — não o que a
+       tela mostra. Hoje os dois são iguais (travada não se edita), e é este
+       desvio que garante que continuem: a exportação leva o protocolo do
+       envio, e protocolo com conteúdo diferente do banco é recibo falso. */
+    var fonte = travada() && enviado ? enviado.dados : dados;
+    function get(k) { return fonte[k]; }
+    function num(k) { return parseFloat(String(fonte[k] || "").replace(",", ".")); }
     var blocos = [];
     function bloco(titulo, linhas) {
       var tem = linhas.filter(function (l) { return l; });
@@ -749,13 +998,18 @@ button { font: inherit; color: inherit; }
     var rodape = "\n\nExportado do AGMEJC (protótipo) em " +
       dois(agora.getDate()) + "/" + dois(agora.getMonth() + 1) + "/" + agora.getFullYear() +
       " " + dois(agora.getHours()) + ":" + dois(agora.getMinutes()) + " · " +
-      Object.keys(dados).length + " campo(s) preenchido(s). Campo não citado = não preenchido.";
+      Object.keys(fonte).length + " campo(s) preenchido(s). Campo não citado = não preenchido.";
     /* A chave de continuidade viaja daqui para o próximo atendimento, do mesmo
        jeito que a 1ª consulta a passou para cá. */
-    var chave = ultimoProtocolo
+    /* A chave só sai com a consulta FINALIZADA. Antes disso o protocolo pode
+       não existir no banco — ou, depois de uma recusa, vir a existir com
+       outro conteúdo —, e o texto colado no AGHU levaria um recibo falso. */
+    var chave = estado === "finalizada" && protocoloAtual
       ? "\nChave de continuidade PNAR · gestação " + (get("gestacao_id") || "não vinculada") +
-        " · atendimento " + ultimoProtocolo
-      : "";
+        " · atendimento " + protocoloAtual
+      : estado === "enviando" || estado === "nao_confirmada"
+        ? "\nGravação no banco do PNAR NÃO confirmada: sem chave de continuidade. Exporte de novo depois da confirmação."
+        : "\nConsulta NÃO gravada no banco do PNAR: sem chave de continuidade.";
     return cab + "\n" + corpo + rodape + chave;
   }
 
@@ -764,6 +1018,10 @@ button { font: inherit; color: inherit; }
     var t = ev.target.closest("button");
     if (!t) { return; }
     if (t.dataset.bloco) { blocoAtivo = t.dataset.bloco; render(); return; }
+    // Travada, nada responde — o <fieldset disabled> já impede o clique; isto
+    // é a segunda trava, para o caso de um controle nascer fora dele.
+    if (travada() && (t.dataset.descartar ||
+        (t.parentElement && t.parentElement.dataset.tri))) { return; }
     if (t.parentElement && t.parentElement.dataset.tri) {
       var ch = t.parentElement.dataset.tri, v = t.dataset.v;
       // clicar no já selecionado volta para "não perguntei" — o terceiro
@@ -772,14 +1030,13 @@ button { font: inherit; color: inherit; }
       render(); return;
     }
     if (t.dataset.descartar) { set(t.dataset.descartar, null); render(); return; }
-    if (t.id === "finalizar") { finalizar(); return; }
-    if (t.id === "salvo-exportar") {
-      document.getElementById("export-texto").value = montarExportacao();
-      document.getElementById("modal-export").style.display = "flex";
-      return;
+    if (t.id === "finalizar" || t.id === "salvo-reenviar") { finalizar(); return; }
+    if (t.id === "nova-paciente" || t.id === "salvo-nova" || t.id === "faixa-nova") {
+      novaPaciente(); return;
     }
-    if (t.id === "salvo-fechar") { document.getElementById("modal-salvo").style.display = "none"; return; }
-    if (t.id === "export-fechar") { document.getElementById("modal-export").style.display = "none"; return; }
+    if (t.id === "salvo-exportar" || t.id === "faixa-exportar") { abrirExportacao(); return; }
+    if (t.id === "salvo-fechar") { fecharModal(document.getElementById("modal-salvo")); return; }
+    if (t.id === "export-fechar") { fecharModal(document.getElementById("modal-export")); return; }
     if (t.id === "export-copiar") {
       var area = document.getElementById("export-texto");
       function feito() {
@@ -821,6 +1078,62 @@ button { font: inherit; color: inherit; }
     atualizarTopo();
   });
 
+  /* ---- popups ------------------------------------------------------------ */
+  function abrirExportacao() {
+    document.getElementById("export-texto").value = montarExportacao();
+    document.getElementById("modal-export").style.display = "flex";
+    // Só conta o texto que leva a chave: exportar antes de gravar não basta.
+    if (estado === "finalizada") { exportou = true; }
+    document.getElementById("export-copiar").focus();
+  }
+  function modalAberto() {
+    var ex = document.getElementById("modal-export"), sv = document.getElementById("modal-salvo");
+    if (ex.style.display === "flex") { return ex; }
+    if (sv.style.display === "flex") { return sv; }
+    return null;
+  }
+  /* Fechar popup não apaga nada: a consulta continua atrás dele, e o que já
+     foi gravado continua gravado. Por isso ESC e clique no fundo fecham sem
+     perguntar, como na 1ª consulta. */
+  function fecharModal(m) {
+    m.style.display = "none";
+    var outro = modalAberto();
+    var alvo = outro ? outro.querySelector(".botao--principal:not([hidden])")
+      : document.getElementById("finalizar");
+    if (alvo && !alvo.disabled) { alvo.focus(); }
+  }
+  ["modal-salvo", "modal-export"].forEach(function (id) {
+    document.getElementById(id).addEventListener("click", function (ev) {
+      if (ev.target === this) { fecharModal(this); }
+    });
+  });
+  document.addEventListener("keydown", function (ev) {
+    var m = modalAberto();
+    if (!m) { return; }
+    if (ev.key === "Escape") { ev.preventDefault(); fecharModal(m); return; }
+    if (ev.key !== "Tab") { return; }
+    // O foco não sai do popup aberto: atrás dele está o "Finalizar".
+    var alvos = Array.prototype.filter.call(m.querySelectorAll("button, textarea"), function (el) {
+      return !el.disabled && !el.hidden && el.offsetParent !== null;
+    });
+    if (!alvos.length) { return; }
+    var i = alvos.indexOf(document.activeElement);
+    var prox = ev.shiftKey ? (i <= 0 ? alvos.length - 1 : i - 1)
+      : (i < 0 || i === alvos.length - 1 ? 0 : i + 1);
+    ev.preventDefault();
+    alvos[prox].focus();
+  });
+
+  /* Fechar ou recarregar a aba avisa quando alguma coisa se perderia — o
+     mesmo critério de "Nova paciente". Aviso, nunca bloqueio (convenção 9). */
+  window.addEventListener("beforeunload", function (ev) {
+    var perde = (estado === "aberta" && preenchidos() > 0) || estado === "enviando" ||
+      estado === "nao_confirmada" || (estado === "finalizada" && !exportou);
+    if (!perde) { return; }
+    ev.preventDefault();
+    ev.returnValue = "";
+  });
+
   /* NAO HA listener de `change` que redesenhe. A primeira versao tinha, e a
      suite pegou o estrago: `change` dispara quando o campo perde o foco, ou
      seja, no instante em que quem preenche vai para o campo seguinte -- o
@@ -830,6 +1143,8 @@ button { font: inherit; color: inherit; }
   function atualizarTopo() {
     document.getElementById("topo-nome").textContent = get("nome") || "—";
     document.getElementById("topo-pront").textContent = get("prontuario") || "—";
+    document.getElementById("topo-percurso").textContent =
+      get("gestacao_id") ? "vinculado" : "não vinculado";
     document.getElementById("contagem").textContent =
       Object.keys(dados).length + " campo(s) preenchido(s)";
     var imc = document.getElementById("imc-campo");
